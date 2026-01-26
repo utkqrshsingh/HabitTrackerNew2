@@ -1,0 +1,233 @@
+package com.mobile.habittrackernew.ui.navigation
+
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.mobile.habittrackernew.ui.screens.aicoach.AICoachScreen
+import com.mobile.habittrackernew.ui.screens.auth.AuthViewModel
+import com.mobile.habittrackernew.ui.screens.auth.LoginScreen
+import com.mobile.habittrackernew.ui.screens.auth.SignupScreen
+import com.mobile.habittrackernew.ui.screens.category.CategoryScreen
+import com.mobile.habittrackernew.ui.screens.dashboard.DashboardScreen
+import com.mobile.habittrackernew.ui.screens.notifications.NotificationsScreen
+import com.mobile.habittrackernew.ui.screens.progress.ProgressScreen
+import com.mobile.habittrackernew.ui.screens.settings.SettingsScreen
+
+sealed class Screen(
+    val route: String,
+    val title: String,
+    val icon: ImageVector? = null
+) {
+    object Login : Screen("login", "Login")
+    object Signup : Screen("signup", "Sign Up")
+    object Dashboard : Screen("dashboard", "Home", Icons.Default.Home)
+    object Progress : Screen("progress", "Progress", Icons.Default.BarChart)
+    object AICoach : Screen("ai_coach", "AI Coach", Icons.Default.Psychology)
+    object Settings : Screen("settings", "Settings", Icons.Default.Settings)
+    object Notifications : Screen("notifications", "Notifications")
+    object Category : Screen("category/{categoryName}", "Category") {
+        fun createRoute(categoryName: String) = "category/$categoryName"
+    }
+}
+
+val bottomNavItems = listOf(
+    Screen.Dashboard,
+    Screen.Progress,
+    Screen.AICoach,
+    Screen.Settings
+)
+
+@Composable
+fun HabitTrackerNavHost(
+    authViewModel: AuthViewModel = hiltViewModel()
+) {
+    val navController = rememberNavController()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentDestination = navBackStackEntry?.destination
+    val authState by authViewModel.uiState.collectAsState()
+
+    val startDestination = if (authState.isLoggedIn) Screen.Dashboard.route else Screen.Login.route
+
+    val showBottomBar = currentDestination?.route in bottomNavItems.map { it.route }
+
+    Scaffold(
+        bottomBar = {
+            if (showBottomBar) {
+                NavigationBar {
+                    bottomNavItems.forEach { screen ->
+                        NavigationBarItem(
+                            icon = {
+                                screen.icon?.let {
+                                    Icon(
+                                        imageVector = it,
+                                        contentDescription = screen.title
+                                    )
+                                }
+                            },
+                            label = { Text(screen.title) },
+                            selected = currentDestination?.hierarchy?.any {
+                                it.route == screen.route
+                            } == true,
+                            onClick = {
+                                navController.navigate(screen.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    ) { innerPadding ->
+        NavHost(
+            navController = navController,
+            startDestination = startDestination,
+            modifier = Modifier.padding(innerPadding)
+        ) {
+            // Auth Screens
+            composable(
+                route = Screen.Login.route,
+                enterTransition = { fadeIn() },
+                exitTransition = { fadeOut() }
+            ) {
+                LoginScreen(
+                    onNavigateToSignup = {
+                        navController.navigate(Screen.Signup.route)
+                    },
+                    onLoginSuccess = {
+                        navController.navigate(Screen.Dashboard.route) {
+                            popUpTo(Screen.Login.route) { inclusive = true }
+                        }
+                    }
+                )
+            }
+
+            composable(
+                route = Screen.Signup.route,
+                enterTransition = { slideInHorizontally(initialOffsetX = { 1000 }) },
+                exitTransition = { slideOutHorizontally(targetOffsetX = { 1000 }) }
+            ) {
+                SignupScreen(
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    },
+                    onSignupSuccess = {
+                        navController.navigate(Screen.Dashboard.route) {
+                            popUpTo(Screen.Login.route) { inclusive = true }
+                        }
+                    }
+                )
+            }
+
+            // Main Screens
+            composable(
+                route = Screen.Dashboard.route,
+                enterTransition = { fadeIn() },
+                exitTransition = { fadeOut() }
+            ) {
+                DashboardScreen(
+                    onCategoryClick = { category ->
+                        navController.navigate(Screen.Category.createRoute(category.name))
+                    },
+                    onNotificationClick = {
+                        navController.navigate(Screen.Notifications.route)
+                    }
+                )
+            }
+
+            composable(
+                route = Screen.Progress.route,
+                enterTransition = { fadeIn() },
+                exitTransition = { fadeOut() }
+            ) {
+                ProgressScreen()
+            }
+
+            composable(
+                route = Screen.AICoach.route,
+                enterTransition = { fadeIn() },
+                exitTransition = { fadeOut() }
+            ) {
+                AICoachScreen(
+                    onBack = {navController.popBackStack()}
+                )
+            }
+
+            composable(
+                route = Screen.Settings.route,
+                enterTransition = { fadeIn() },
+                exitTransition = { fadeOut() }
+            ) {
+                SettingsScreen(
+                    onBackClick = {
+                        navController.popBackStack()
+                    },
+                    onLogout = {
+                        navController.navigate(Screen.Login.route) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
+                )
+            }
+
+            // Notifications Screen
+            composable(
+                route = Screen.Notifications.route,
+                enterTransition = { slideInHorizontally(initialOffsetX = { 1000 }) },
+                exitTransition = { slideOutHorizontally(targetOffsetX = { 1000 }) }
+            ) {
+                NotificationsScreen(
+                    onBackClick = { navController.popBackStack() }
+                )
+            }
+
+            composable(
+                route = Screen.Category.route,
+                arguments = listOf(
+                    navArgument("categoryName") { type = NavType.StringType }
+                ),
+                enterTransition = { slideInHorizontally(initialOffsetX = { 1000 }) },
+                exitTransition = { slideOutHorizontally(targetOffsetX = { 1000 }) }
+            ) { backStackEntry ->
+                val categoryName = backStackEntry.arguments?.getString("categoryName") ?: ""
+                CategoryScreen(
+                    categoryName = categoryName,
+                    onBackClick = { navController.popBackStack() }
+                )
+            }
+        }
+    }
+}
