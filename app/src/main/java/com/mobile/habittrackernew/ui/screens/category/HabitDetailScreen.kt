@@ -1,55 +1,19 @@
 package com.mobile.habittrackernew.ui.screens.category
 
-import com.mobile.habittrackernew.ui.utils.getComposeColor
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.EmojiEvents
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,46 +27,55 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.mobile.habittrackernew.data.models.Category
+import com.mobile.habittrackernew.data.models.Habit
 import com.mobile.habittrackernew.data.models.HabitLog
-import com.mobile.habittrackernew.ui.components.AnimatedCircularProgress
+import com.mobile.habittrackernew.ui.components.AddEditHabitDialog
 import com.mobile.habittrackernew.ui.components.GradientCard
 import com.mobile.habittrackernew.ui.components.WeekDayIndicator
-import com.mobile.habittrackernew.ui.screens.dashboard.getCategoryIcon
+import com.mobile.habittrackernew.ui.utils.getIconByName
+import com.mobile.habittrackernew.ui.utils.parseColor
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CategoryScreen(
-    categoryName: String,
+fun HabitDetailScreen(
+    habitId: Long,
     onBackClick: () -> Unit,
-    viewModel: CategoryViewModel = hiltViewModel()
+    viewModel: HabitDetailViewModel = hiltViewModel()
 ) {
-    val category = try {
-        Category.valueOf(categoryName)
-    } catch (e: Exception) {
-        null
-    }
-
     val uiState by viewModel.uiState.collectAsState()
     val haptic = LocalHapticFeedback.current
+    var showEditDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(categoryName) {
-        viewModel.loadCategory(categoryName)
+    LaunchedEffect(habitId) {
+        viewModel.loadHabit(habitId)
     }
 
-    if (category == null) {
+    val habit = uiState.habit
+
+    if (uiState.isLoading || habit == null) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            Text("Category not found")
+            if (uiState.isLoading) {
+                CircularProgressIndicator()
+            } else {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Habit not found", style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(onClick = onBackClick) {
+                        Text("Go Back")
+                    }
+                }
+            }
         }
         return
     }
 
-    val categoryColor = category.getComposeColor()
+    val habitColor = parseColor(habit.colorHex)
+    val habitIcon = getIconByName(habit.iconName)
 
     Scaffold(
         topBar = {
@@ -116,15 +89,15 @@ fun CategoryScreen(
                                 .background(
                                     brush = Brush.linearGradient(
                                         colors = listOf(
-                                            categoryColor,
-                                            categoryColor.copy(alpha = 0.7f)
+                                            habitColor,
+                                            habitColor.copy(alpha = 0.7f)
                                         )
                                     )
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = getCategoryIcon(category),
+                                imageVector = habitIcon,
                                 contentDescription = null,
                                 tint = Color.White,
                                 modifier = Modifier.size(22.dp)
@@ -132,7 +105,7 @@ fun CategoryScreen(
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = category.displayName,
+                            text = habit.name,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -142,87 +115,100 @@ fun CategoryScreen(
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 },
+                actions = {
+                    IconButton(onClick = { showEditDialog = true }) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit")
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background
                 )
             )
         }
     ) { paddingValues ->
-        if (uiState.isLoading) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                item { Spacer(modifier = Modifier.height(8.dp)) }
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item { Spacer(modifier = Modifier.height(8.dp)) }
 
-                // Streak Hero Card
-                item {
-                    StreakHeroCard(
-                        currentStreak = uiState.currentStreak,
-                        longestStreak = uiState.longestStreak,
-                        isCompletedToday = uiState.isCompletedToday,
-                        color = categoryColor,
-                        onMarkComplete = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            viewModel.toggleTodayCompletion()
-                        }
-                    )
-                }
-
-                // Week Progress
-                item {
-                    WeekProgressSection(
-                        weekLogs = uiState.weekLogs,
-                        color = categoryColor
-                    )
-                }
-
-                // Monthly Calendar
-                item {
-                    MonthlyCalendarCard(
-                        logs = uiState.monthLogs,
-                        color = categoryColor
-                    )
-                }
-
-                // Recent Activity Header
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Recent Activity",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "${uiState.recentLogs.count { it.isCompleted }} completed",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+            // Streak Hero Card
+            item {
+                StreakHeroCard(
+                    currentStreak = uiState.currentStreak,
+                    longestStreak = uiState.longestStreak,
+                    isCompletedToday = uiState.isCompletedToday,
+                    color = habitColor,
+                    onMarkComplete = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        viewModel.toggleTodayCompletion()
                     }
-                }
-
-                // Recent Activity Items
-                items(uiState.recentLogs.take(7)) { log ->
-                    ActivityLogItem(log = log, color = categoryColor)
-                }
-
-                item { Spacer(modifier = Modifier.height(16.dp)) }
+                )
             }
+
+            // Week Progress
+            item {
+                WeekProgressSection(
+                    weekLogs = uiState.weekLogs,
+                    color = habitColor
+                )
+            }
+
+            // Monthly Calendar
+            item {
+                MonthlyCalendarCard(
+                    logs = uiState.monthLogs,
+                    color = habitColor
+                )
+            }
+
+            // Recent Activity Header
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Recent Activity",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "${uiState.recentLogs.count { it.isCompleted }} completed",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // Recent Activity Items
+            items(uiState.recentLogs.take(7)) { log ->
+                ActivityLogItem(log = log, color = habitColor)
+            }
+
+            item { Spacer(modifier = Modifier.height(16.dp)) }
         }
+    }
+
+    // Edit Dialog
+    if (showEditDialog) {
+        AddEditHabitDialog(
+            habit = habit,
+            onDismiss = { showEditDialog = false },
+            onSave = { updatedHabit ->
+                viewModel.updateHabit(updatedHabit)
+                showEditDialog = false
+            },
+            onDelete = { habitToDelete ->
+                viewModel.deleteHabit(habitToDelete)
+                showEditDialog = false
+                onBackClick()
+            }
+        )
     }
 }
 

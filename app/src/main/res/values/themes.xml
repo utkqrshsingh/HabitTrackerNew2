@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
+    <!-- Your existing base theme -->
     <style name="Theme.HabitTrackerNew" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:windowBackground">@android:color/white</item>
+        <!-- Your existing theme attributes -->
+    </style>
+
+    <!-- Alarm Theme - Basic (no special attributes for older Android) -->
+    <style name="Theme.HabitTrackerNew.Alarm" parent="Theme.HabitTrackerNew">
+        <!-- Empty - we handle lock screen in code -->
     </style>
 
 </resources>

@@ -36,15 +36,19 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.mobile.habittrackernew.services.NotificationType
 import com.mobile.habittrackernew.services.ScheduledNotification
 
@@ -55,6 +59,20 @@ fun NotificationsScreen(
     viewModel: NotificationsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // Refresh when screen becomes visible (e.g., returning from settings)
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refresh()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -87,14 +105,23 @@ fun NotificationsScreen(
             item {
                 PermissionStatusCard(
                     hasPermission = uiState.hasNotificationPermission,
+                    notificationsEnabled = uiState.notificationsEnabled,
                     onRequestPermission = { viewModel.requestNotificationPermission() }
                 )
+            }
+
+            // Master Toggle Info (if notifications are disabled in settings)
+            if (!uiState.notificationsEnabled) {
+                item {
+                    NotificationsDisabledCard()
+                }
             }
 
             // Quick Actions
             item {
                 QuickActionsCard(
-                    onSendTestNotification = { viewModel.sendTestNotification() }
+                    onSendTestNotification = { viewModel.sendTestNotification() },
+                    enabled = uiState.hasNotificationPermission && uiState.notificationsEnabled
                 )
             }
 
@@ -112,7 +139,8 @@ fun NotificationsScreen(
             items(uiState.scheduledNotifications) { notification ->
                 NotificationCard(
                     notification = notification,
-                    onToggle = { viewModel.toggleNotification(notification.id) }
+                    onToggle = { viewModel.toggleNotification(notification.id) },
+                    enabled = uiState.notificationsEnabled
                 )
             }
 
@@ -131,13 +159,16 @@ fun NotificationsScreen(
 @Composable
 fun PermissionStatusCard(
     hasPermission: Boolean,
+    notificationsEnabled: Boolean,
     onRequestPermission: () -> Unit
 ) {
+    val isFullyEnabled = hasPermission && notificationsEnabled
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (hasPermission)
+            containerColor = if (isFullyEnabled)
                 MaterialTheme.colorScheme.primaryContainer
             else
                 MaterialTheme.colorScheme.errorContainer
@@ -154,7 +185,7 @@ fun PermissionStatusCard(
                     .size(48.dp)
                     .clip(CircleShape)
                     .background(
-                        if (hasPermission)
+                        if (isFullyEnabled)
                             MaterialTheme.colorScheme.primary
                         else
                             MaterialTheme.colorScheme.error
@@ -162,7 +193,7 @@ fun PermissionStatusCard(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = if (hasPermission)
+                    imageVector = if (isFullyEnabled)
                         Icons.Default.NotificationsActive
                     else
                         Icons.Default.NotificationsOff,
@@ -175,24 +206,26 @@ fun PermissionStatusCard(
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = if (hasPermission)
-                        "Notifications Enabled"
-                    else
-                        "Notifications Disabled",
+                    text = when {
+                        !hasPermission -> "Permission Required"
+                        !notificationsEnabled -> "Notifications Disabled"
+                        else -> "Notifications Enabled"
+                    },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = if (hasPermission)
+                    color = if (isFullyEnabled)
                         MaterialTheme.colorScheme.onPrimaryContainer
                     else
                         MaterialTheme.colorScheme.onErrorContainer
                 )
                 Text(
-                    text = if (hasPermission)
-                        "You'll receive habit reminders"
-                    else
-                        "Enable notifications to get reminders",
+                    text = when {
+                        !hasPermission -> "Grant permission to receive reminders"
+                        !notificationsEnabled -> "Enable in Settings to receive reminders"
+                        else -> "You'll receive habit reminders"
+                    },
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (hasPermission)
+                    color = if (isFullyEnabled)
                         MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                     else
                         MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f)
@@ -209,8 +242,40 @@ fun PermissionStatusCard(
 }
 
 @Composable
+fun NotificationsDisabledCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.NotificationsOff,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = "Notifications are turned off in Settings. Go to Settings > Notifications to enable them.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
 fun QuickActionsCard(
-    onSendTestNotification: () -> Unit
+    onSendTestNotification: () -> Unit,
+    enabled: Boolean = true
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -232,7 +297,8 @@ fun QuickActionsCard(
             Button(
                 onClick = onSendTestNotification,
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                enabled = enabled
             ) {
                 Icon(
                     imageVector = Icons.Default.NotificationsActive,
@@ -241,6 +307,15 @@ fun QuickActionsCard(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Send Test Notification")
             }
+
+            if (!enabled) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Enable notifications to test",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
@@ -248,13 +323,16 @@ fun QuickActionsCard(
 @Composable
 fun NotificationCard(
     notification: ScheduledNotification,
-    onToggle: () -> Unit
+    onToggle: () -> Unit,
+    enabled: Boolean = true
 ) {
+    val isActuallyEnabled = notification.isEnabled && enabled
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (notification.isEnabled)
+            containerColor = if (isActuallyEnabled)
                 MaterialTheme.colorScheme.surface
             else
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -270,13 +348,19 @@ fun NotificationCard(
                 modifier = Modifier
                     .size(44.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(getNotificationColor(notification.type).copy(alpha = 0.2f)),
+                    .background(
+                        getNotificationColor(notification.type).copy(
+                            alpha = if (isActuallyEnabled) 0.2f else 0.1f
+                        )
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.Schedule,
                     contentDescription = null,
-                    tint = getNotificationColor(notification.type)
+                    tint = getNotificationColor(notification.type).copy(
+                        alpha = if (isActuallyEnabled) 1f else 0.5f
+                    )
                 )
             }
 
@@ -286,18 +370,26 @@ fun NotificationCard(
                 Text(
                     text = notification.title,
                     style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Medium,
+                    color = if (isActuallyEnabled)
+                        MaterialTheme.colorScheme.onSurface
+                    else
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                 )
                 Text(
                     text = notification.message,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                        alpha = if (isActuallyEnabled) 1f else 0.5f
+                    ),
                     maxLines = 1
                 )
                 Text(
                     text = "⏰ ${notification.time}",
                     style = MaterialTheme.typography.labelMedium,
-                    color = getNotificationColor(notification.type),
+                    color = getNotificationColor(notification.type).copy(
+                        alpha = if (isActuallyEnabled) 1f else 0.5f
+                    ),
                     fontWeight = FontWeight.SemiBold
                 )
             }
@@ -305,9 +397,12 @@ fun NotificationCard(
             Switch(
                 checked = notification.isEnabled,
                 onCheckedChange = { onToggle() },
+                enabled = enabled,
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = Color.White,
-                    checkedTrackColor = getNotificationColor(notification.type)
+                    checkedTrackColor = getNotificationColor(notification.type),
+                    disabledCheckedThumbColor = Color.White.copy(alpha = 0.5f),
+                    disabledCheckedTrackColor = getNotificationColor(notification.type).copy(alpha = 0.3f)
                 )
             )
         }
@@ -340,7 +435,8 @@ fun TipsCard() {
             Text(
                 text = "• Set reminders at times when you're most likely to complete habits\n" +
                         "• Morning reminders help start your day right\n" +
-                        "• Evening reminders help you reflect on progress",
+                        "• Evening reminders help you reflect on progress\n" +
+                        "• You can customize reminder times in Settings",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
             )

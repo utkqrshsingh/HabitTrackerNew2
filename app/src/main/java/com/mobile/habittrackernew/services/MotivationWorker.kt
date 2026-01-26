@@ -10,13 +10,16 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.mobile.habittrackernew.HabitTrackerApplication
 import com.mobile.habittrackernew.MainActivity
+import com.mobile.habittrackernew.data.preferences.PreferencesManager
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.flow.first
 
 @HiltWorker
 class MotivationWorker @AssistedInject constructor(
     @Assisted private val context: Context,
-    @Assisted params: WorkerParameters
+    @Assisted params: WorkerParameters,
+    private val preferencesManager: PreferencesManager
 ) : CoroutineWorker(context, params) {
 
     private val motivationalMessages = listOf(
@@ -27,11 +30,25 @@ class MotivationWorker @AssistedInject constructor(
         "🌟 You're doing amazing! Keep it up!",
         "💎 Consistency is the key to success!",
         "🚀 Every day is a new opportunity!",
-        "🏆 Champions are made through daily habits!"
+        "🏆 Champions are made through daily habits!",
+        "✨ Believe in yourself! You've got this!",
+        "🎖️ Each habit completed is a victory!",
+        "💫 Progress, not perfection!",
+        "🌈 Your future self will thank you!"
     )
 
     override suspend fun doWork(): Result {
+        // Check if notifications are enabled
+        val notificationsEnabled = preferencesManager.notificationsEnabled.first()
+        if (!notificationsEnabled) {
+            return Result.success() // Skip silently
+        }
+
         showMotivationNotification()
+
+        // Increment notification count
+        preferencesManager.incrementNotificationCount()
+
         return Result.success()
     }
 
@@ -51,8 +68,9 @@ class MotivationWorker @AssistedInject constructor(
             HabitTrackerApplication.MOTIVATION_CHANNEL_ID
         )
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("Your AI Coach")
+            .setContentTitle("Your AI Coach 🤖")
             .setContentText(message)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)

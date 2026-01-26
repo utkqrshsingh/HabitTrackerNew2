@@ -5,7 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -32,6 +32,9 @@ class PreferencesManager @Inject constructor(
         private val DAILY_GOAL = stringPreferencesKey("daily_goal")
         private val MORNING_REMINDER = stringPreferencesKey("morning_reminder")
         private val EVENING_REMINDER = stringPreferencesKey("evening_reminder")
+        private val NOTIFICATION_COUNT = intPreferencesKey("notification_count")
+        private val USE_SYSTEM_THEME = booleanPreferencesKey("use_system_theme")
+        private val HAS_SEEDED_HABITS = booleanPreferencesKey("has_seeded_habits") // NEW
     }
 
     val isLoggedIn: Flow<Boolean> = context.dataStore.data.map { prefs ->
@@ -40,6 +43,10 @@ class PreferencesManager @Inject constructor(
 
     val isDarkMode: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[IS_DARK_MODE] ?: false
+    }
+
+    val useSystemTheme: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[USE_SYSTEM_THEME] ?: true
     }
 
     val notificationsEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
@@ -66,6 +73,15 @@ class PreferencesManager @Inject constructor(
         prefs[EVENING_REMINDER] ?: "20:00"
     }
 
+    val notificationCount: Flow<Int> = context.dataStore.data.map { prefs ->
+        prefs[NOTIFICATION_COUNT] ?: 0
+    }
+
+    // NEW: Check if habits have been seeded
+    val hasSeededHabits: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[HAS_SEEDED_HABITS] ?: false
+    }
+
     suspend fun setLoggedIn(
         isLoggedIn: Boolean,
         userId: String = "",
@@ -85,6 +101,13 @@ class PreferencesManager @Inject constructor(
     suspend fun setDarkMode(isDark: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[IS_DARK_MODE] = isDark
+            prefs[USE_SYSTEM_THEME] = false
+        }
+    }
+
+    suspend fun setUseSystemTheme(useSystem: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[USE_SYSTEM_THEME] = useSystem
         }
     }
 
@@ -115,6 +138,32 @@ class PreferencesManager @Inject constructor(
     suspend fun updateUserName(name: String) {
         context.dataStore.edit { prefs ->
             prefs[USER_NAME] = name
+        }
+    }
+
+    suspend fun setNotificationCount(count: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[NOTIFICATION_COUNT] = count
+        }
+    }
+
+    suspend fun incrementNotificationCount() {
+        context.dataStore.edit { prefs ->
+            val current = prefs[NOTIFICATION_COUNT] ?: 0
+            prefs[NOTIFICATION_COUNT] = current + 1
+        }
+    }
+
+    suspend fun clearNotificationCount() {
+        context.dataStore.edit { prefs ->
+            prefs[NOTIFICATION_COUNT] = 0
+        }
+    }
+
+    // NEW: Mark habits as seeded
+    suspend fun setHasSeededHabits(seeded: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[HAS_SEEDED_HABITS] = seeded
         }
     }
 

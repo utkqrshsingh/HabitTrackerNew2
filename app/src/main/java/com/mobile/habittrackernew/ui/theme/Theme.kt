@@ -17,49 +17,57 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
-    primary = PrimaryDark,
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFF312E81),
-    onPrimaryContainer = Color(0xFFE0E7FF),
-    secondary = SecondaryDark,
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFF064E3B),
-    onSecondaryContainer = Color(0xFFD1FAE5),
-    tertiary = Color(0xFFF472B6),
-    background = BackgroundDark,
-    onBackground = Color(0xFFF1F5F9),
-    surface = SurfaceDark,
-    onSurface = Color(0xFFE2E8F0),
-    surfaceVariant = Color(0xFF334155),
-    onSurfaceVariant = Color(0xFFCBD5E1),
-    error = ErrorColor,
-    onError = Color.White
+    primary = Purple80,
+    onPrimary = Color.Black,
+    primaryContainer = Purple40,
+    onPrimaryContainer = Purple80,
+    secondary = PurpleGrey80,
+    onSecondary = Color.Black,
+    secondaryContainer = PurpleGrey40,
+    onSecondaryContainer = PurpleGrey80,
+    tertiary = Pink80,
+    onTertiary = Color.Black,
+    tertiaryContainer = Pink40,
+    onTertiaryContainer = Pink80,
+    background = Color(0xFF121212),
+    onBackground = Color(0xFFE6E6E6),
+    surface = Color(0xFF1E1E1E),
+    onSurface = Color(0xFFE6E6E6),
+    surfaceVariant = Color(0xFF2D2D2D),
+    onSurfaceVariant = Color(0xFFCACACA),
+    outline = Color(0xFF8E8E8E),
+    error = Color(0xFFCF6679),
+    onError = Color.Black
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = PrimaryLight,
+    primary = Purple40,
     onPrimary = Color.White,
-    primaryContainer = PrimaryContainer,
-    onPrimaryContainer = OnPrimaryContainer,
-    secondary = SecondaryLight,
+    primaryContainer = Purple90,
+    onPrimaryContainer = Purple10,
+    secondary = PurpleGrey40,
     onSecondary = Color.White,
-    secondaryContainer = SecondaryContainer,
-    onSecondaryContainer = Color(0xFF064E3B),
-    tertiary = Color(0xFFEC4899),
-    background = BackgroundLight,
-    onBackground = TextPrimary,
-    surface = SurfaceLight,
-    onSurface = TextPrimary,
-    surfaceVariant = Color(0xFFF1F5F9),
-    onSurfaceVariant = TextSecondary,
-    error = ErrorColor,
+    secondaryContainer = PurpleGrey90,
+    onSecondaryContainer = PurpleGrey10,
+    tertiary = Pink40,
+    onTertiary = Color.White,
+    tertiaryContainer = Pink90,
+    onTertiaryContainer = Pink10,
+    background = Color(0xFFFFFBFE),
+    onBackground = Color(0xFF1C1B1F),
+    surface = Color(0xFFFFFBFE),
+    onSurface = Color(0xFF1C1B1F),
+    surfaceVariant = Color(0xFFE7E0EC),
+    onSurfaceVariant = Color(0xFF49454F),
+    outline = Color(0xFF79747E),
+    error = Color(0xFFB3261E),
     onError = Color.White
 )
 
 @Composable
 fun HabitTrackerTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false, // Set to false for consistent branding
+    dynamicColor: Boolean = false, // Set to false for consistent colors
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -75,7 +83,7 @@ fun HabitTrackerTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = Color.Transparent.toArgb()
+            window.statusBarColor = colorScheme.background.toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }

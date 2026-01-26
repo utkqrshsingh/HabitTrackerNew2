@@ -2,15 +2,9 @@ package com.mobile.habittrackernew.di
 
 import android.content.Context
 import androidx.room.Room
-import com.mobile.habittrackernew.data.database.AIMessageDao
-import com.mobile.habittrackernew.data.database.AppDatabase
-import com.mobile.habittrackernew.data.database.HabitDao
-import com.mobile.habittrackernew.data.database.HabitLogDao
-import com.mobile.habittrackernew.data.database.UserProfileDao
+import com.mobile.habittrackernew.data.database.*
 import com.mobile.habittrackernew.data.preferences.PreferencesManager
 import com.mobile.habittrackernew.data.repository.HabitRepository
-import com.mobile.habittrackernew.services.AIService
-import com.mobile.habittrackernew.services.GoogleAuthHelper
 import com.mobile.habittrackernew.services.NotificationHelper
 import dagger.Module
 import dagger.Provides
@@ -25,7 +19,9 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
+    fun provideAppDatabase(
+        @ApplicationContext context: Context
+    ): AppDatabase {
         return Room.databaseBuilder(
             context,
             AppDatabase::class.java,
@@ -61,8 +57,19 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun providePreferencesManager(@ApplicationContext context: Context): PreferencesManager {
+    fun providePreferencesManager(
+        @ApplicationContext context: Context
+    ): PreferencesManager {
         return PreferencesManager(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideNotificationHelper(
+        @ApplicationContext context: Context,
+        preferencesManager: PreferencesManager
+    ): NotificationHelper {
+        return NotificationHelper(context, preferencesManager)
     }
 
     @Provides
@@ -71,26 +78,22 @@ object AppModule {
         habitDao: HabitDao,
         habitLogDao: HabitLogDao,
         userProfileDao: UserProfileDao,
-        aiMessageDao: AIMessageDao
+        aiMessageDao: AIMessageDao,
+        notificationHelper: NotificationHelper,
+        preferencesManager: PreferencesManager // ADD THIS
     ): HabitRepository {
-        return HabitRepository(habitDao, habitLogDao, userProfileDao, aiMessageDao)
+        return HabitRepository(
+            habitDao,
+            habitLogDao,
+            userProfileDao,
+            aiMessageDao,
+            notificationHelper,
+            preferencesManager // ADD THIS
+        )
     }
-
     @Provides
     @Singleton
-    fun provideAIService(): AIService {
-        return AIService()
-    }
-
-    @Provides
-    @Singleton
-    fun provideGoogleAuthHelper(@ApplicationContext context: Context): GoogleAuthHelper {
-        return GoogleAuthHelper(context)
-    }
-
-    @Provides
-    @Singleton
-    fun provideNotificationHelper(@ApplicationContext context: Context): NotificationHelper {
-        return NotificationHelper(context)
+    fun provideAlarmDao(database: AppDatabase): AlarmDao {
+        return database.alarmDao()
     }
 }

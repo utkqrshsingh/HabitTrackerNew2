@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DarkMode
@@ -26,10 +27,11 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -44,8 +46,11 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.TimePickerState
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -69,11 +74,16 @@ import com.mobile.habittrackernew.ui.theme.GradientPurple
 fun SettingsScreen(
     onBackClick: () -> Unit,
     onLogout: () -> Unit,
+    onAlarmsClick: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showEditNameDialog by remember { mutableStateOf(false) }
     var editedName by remember { mutableStateOf("") }
+
+    // Time picker states
+    var showMorningTimePicker by remember { mutableStateOf(false) }
+    var showEveningTimePicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.logoutSuccess) {
         if (uiState.logoutSuccess) {
@@ -186,7 +196,7 @@ fun SettingsScreen(
                 SettingsToggleItem(
                     icon = Icons.Default.DarkMode,
                     title = "Dark Mode",
-                    subtitle = "Use dark theme",
+                    subtitle = if (uiState.isDarkMode) "Dark theme enabled" else "Light theme enabled",
                     isChecked = uiState.isDarkMode,
                     onToggle = { viewModel.toggleDarkMode() }
                 )
@@ -197,7 +207,7 @@ fun SettingsScreen(
                 SettingsToggleItem(
                     icon = Icons.Default.Notifications,
                     title = "Notifications",
-                    subtitle = "Enable push notifications",
+                    subtitle = if (uiState.notificationsEnabled) "Push notifications enabled" else "Push notifications disabled",
                     isChecked = uiState.notificationsEnabled,
                     onToggle = { viewModel.toggleNotifications() }
                 )
@@ -214,20 +224,53 @@ fun SettingsScreen(
             )
 
             SettingsCard {
-                SettingsClickItem(
-                    icon = Icons.Default.Schedule,
+                SettingsTimeItem(
+                    icon = Icons.Default.WbSunny,
                     title = "Morning Reminder",
-                    subtitle = uiState.morningReminder,
-                    onClick = { /* Show time picker */ }
+                    subtitle = "Daily motivation to start your day",
+                    time = uiState.morningReminder,
+                    enabled = uiState.notificationsEnabled,
+                    onClick = { showMorningTimePicker = true }
                 )
 
                 Divider(modifier = Modifier.padding(horizontal = 16.dp))
 
-                SettingsClickItem(
-                    icon = Icons.Default.Schedule,
+                SettingsTimeItem(
+                    icon = Icons.Default.NightsStay,
                     title = "Evening Reminder",
-                    subtitle = uiState.eveningReminder,
-                    onClick = { /* Show time picker */ }
+                    subtitle = "Reminder to complete your habits",
+                    time = uiState.eveningReminder,
+                    enabled = uiState.notificationsEnabled,
+                    onClick = { showEveningTimePicker = true }
+                )
+            }
+
+            if (!uiState.notificationsEnabled) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Enable notifications to customize reminders",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 4.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Alarms Section
+            Text(
+                text = "Alarms",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
+            )
+
+            SettingsCard {
+                SettingsClickItem(
+                    icon = Icons.Default.Alarm,
+                    title = "Manage Alarms",
+                    subtitle = "Set custom alarms and reminders",
+                    onClick = onAlarmsClick
                 )
             }
 
@@ -334,6 +377,32 @@ fun SettingsScreen(
         )
     }
 
+    // Morning Time Picker Dialog
+    if (showMorningTimePicker) {
+        TimePickerDialog(
+            title = "Morning Reminder",
+            initialTime = uiState.morningReminder,
+            onDismiss = { showMorningTimePicker = false },
+            onConfirm = { time ->
+                viewModel.setMorningReminder(time)
+                showMorningTimePicker = false
+            }
+        )
+    }
+
+    // Evening Time Picker Dialog
+    if (showEveningTimePicker) {
+        TimePickerDialog(
+            title = "Evening Reminder",
+            initialTime = uiState.eveningReminder,
+            onDismiss = { showEveningTimePicker = false },
+            onConfirm = { time ->
+                viewModel.setEveningReminder(time)
+                showEveningTimePicker = false
+            }
+        )
+    }
+
     // Logout Dialog
     if (uiState.showLogoutDialog) {
         AlertDialog(
@@ -371,6 +440,66 @@ fun SettingsScreen(
             }
         )
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TimePickerDialog(
+    title: String,
+    initialTime: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    val (initialHour, initialMinute) = remember(initialTime) {
+        try {
+            val parts = initialTime.split(":")
+            Pair(parts[0].toInt(), parts[1].toInt())
+        } catch (e: Exception) {
+            Pair(8, 0)
+        }
+    }
+
+    val timePickerState = rememberTimePickerState(
+        initialHour = initialHour,
+        initialMinute = initialMinute,
+        is24Hour = false
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                TimePicker(state = timePickerState)
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val hour = timePickerState.hour
+                    val minute = timePickerState.minute
+                    val formattedTime = String.format("%02d:%02d", hour, minute)
+                    onConfirm(formattedTime)
+                }
+            ) {
+                Text("Set Time")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable
@@ -442,6 +571,119 @@ fun SettingsToggleItem(
                 checkedThumbColor = Color.White,
                 checkedTrackColor = MaterialTheme.colorScheme.primary
             )
+        )
+    }
+}
+
+@Composable
+fun SettingsTimeItem(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    time: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    val formattedTime = remember(time) {
+        try {
+            val parts = time.split(":")
+            val hour = parts[0].toInt()
+            val minute = parts[1].toInt()
+            val amPm = if (hour >= 12) "PM" else "AM"
+            val displayHour = when {
+                hour == 0 -> 12
+                hour > 12 -> hour - 12
+                else -> hour
+            }
+            String.format("%d:%02d %s", displayHour, minute, amPm)
+        } catch (e: Exception) {
+            time
+        }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled) { onClick() }
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(
+                    if (enabled)
+                        MaterialTheme.colorScheme.primaryContainer
+                    else
+                        MaterialTheme.colorScheme.surfaceVariant
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (enabled)
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                else
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(16.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = if (enabled)
+                    MaterialTheme.colorScheme.onSurface
+                else
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (enabled)
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                else
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            )
+        }
+
+        // Time Badge
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(
+                    if (enabled)
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                    else
+                        MaterialTheme.colorScheme.surfaceVariant
+                )
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            Text(
+                text = formattedTime,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = if (enabled)
+                    MaterialTheme.colorScheme.primary
+                else
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Icon(
+            imageVector = Icons.Default.ChevronRight,
+            contentDescription = null,
+            tint = if (enabled)
+                MaterialTheme.colorScheme.onSurfaceVariant
+            else
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
         )
     }
 }

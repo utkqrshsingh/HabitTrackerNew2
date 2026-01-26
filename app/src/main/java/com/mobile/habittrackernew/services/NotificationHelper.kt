@@ -12,7 +12,13 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.mobile.habittrackernew.HabitTrackerApplication
 import com.mobile.habittrackernew.MainActivity
+import com.mobile.habittrackernew.data.preferences.PreferencesManager
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.util.Calendar
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -36,10 +42,12 @@ enum class NotificationType {
 
 @Singleton
 class NotificationHelper @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val preferencesManager: PreferencesManager
 ) {
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+    private val coroutineScope = CoroutineScope(Dispatchers.IO)
 
     fun hasNotificationPermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -52,11 +60,17 @@ class NotificationHelper @Inject constructor(
         }
     }
 
+    fun areNotificationsEnabled(): Boolean {
+        return runBlocking { preferencesManager.notificationsEnabled.first() }
+    }
+
     fun showInstantNotification(
         title: String,
         message: String,
         notificationId: Int = System.currentTimeMillis().toInt()
     ) {
+        // Check if notifications are enabled in preferences
+        if (!areNotificationsEnabled()) return
         if (!hasNotificationPermission()) return
 
         val intent = Intent(context, MainActivity::class.java).apply {
@@ -81,6 +95,11 @@ class NotificationHelper @Inject constructor(
             .build()
 
         notificationManager.notify(notificationId, notification)
+
+        // Increment notification count
+        coroutineScope.launch {
+            preferencesManager.incrementNotificationCount()
+        }
     }
 
     fun scheduleNotification(
@@ -90,6 +109,9 @@ class NotificationHelper @Inject constructor(
         minute: Int,
         notificationId: Int
     ) {
+        // Check if notifications are enabled
+        if (!areNotificationsEnabled()) return
+
         val intent = Intent(context, NotificationReceiver::class.java).apply {
             putExtra("title", title)
             putExtra("message", message)
@@ -133,15 +155,28 @@ class NotificationHelper @Inject constructor(
         notificationManager.cancel(notificationId)
     }
 
+    fun cancelAllNotifications() {
+        // Cancel all known notification IDs
+        cancelNotification(1001) // Morning
+        cancelNotification(1002) // Midday
+        cancelNotification(1003) // Evening
+
+        // Clear all displayed notifications
+        notificationManager.cancelAll()
+    }
+
     fun getScheduledNotifications(): List<ScheduledNotification> {
-        // Return default scheduled notifications
+        val notificationsEnabled = areNotificationsEnabled()
+        val morningTime = runBlocking { preferencesManager.morningReminder.first() }
+        val eveningTime = runBlocking { preferencesManager.eveningReminder.first() }
+
         return listOf(
             ScheduledNotification(
                 id = 1001,
                 title = "Morning Motivation",
                 message = "Rise and shine! Time to crush your habits today! ☀️",
-                time = "08:00",
-                isEnabled = true,
+                time = morningTime,
+                isEnabled = notificationsEnabled,
                 type = NotificationType.MORNING_REMINDER
             ),
             ScheduledNotification(
@@ -149,17 +184,21 @@ class NotificationHelper @Inject constructor(
                 title = "Midday Check-in",
                 message = "How's your day going? Don't forget your habits! 💪",
                 time = "13:00",
-                isEnabled = true,
+                isEnabled = notificationsEnabled,
                 type = NotificationType.HABIT_REMINDER
             ),
             ScheduledNotification(
                 id = 1003,
                 title = "Evening Reminder",
                 message = "End your day strong! Complete your remaining habits 🌙",
-                time = "20:00",
-                isEnabled = true,
+                time = eveningTime,
+                isEnabled = notificationsEnabled,
                 type = NotificationType.EVENING_REMINDER
             )
         )
+    }
+
+    suspend fun clearNotificationCount() {
+        preferencesManager.clearNotificationCount()
     }
 }

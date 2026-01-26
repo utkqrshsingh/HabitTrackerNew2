@@ -1,10 +1,15 @@
 package com.mobile.habittrackernew.ui.screens.aicoach
+
+import android.view.ViewTreeObserver
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,11 +23,16 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -32,8 +42,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -44,6 +58,28 @@ data class AIMessage(
     val content: String,
     val isFromUser: Boolean
 )
+
+// ---------- KEYBOARD STATE HELPER ----------
+
+@Composable
+fun rememberKeyboardVisibility(): State<Boolean> {
+    val view = LocalView.current
+    val isKeyboardOpen = remember { mutableStateOf(false) }
+
+    DisposableEffect(view) {
+        val listener = ViewTreeObserver.OnGlobalLayoutListener {
+            val insets = ViewCompat.getRootWindowInsets(view)
+            val imeVisible = insets?.isVisible(WindowInsetsCompat.Type.ime()) ?: false
+            isKeyboardOpen.value = imeVisible
+        }
+        view.viewTreeObserver.addOnGlobalLayoutListener(listener)
+        onDispose {
+            view.viewTreeObserver.removeOnGlobalLayoutListener(listener)
+        }
+    }
+
+    return isKeyboardOpen
+}
 
 // ---------- MAIN SCREEN ----------
 
@@ -64,40 +100,79 @@ fun AICoachScreen(
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val isKeyboardVisible by rememberKeyboardVisibility()
 
-    // Automatically scroll to the latest message
-    LaunchedEffect(messages.size) {
+    // Scroll to bottom when new message added or keyboard opens
+    LaunchedEffect(messages.size, isKeyboardVisible) {
         if (messages.isNotEmpty()) {
+            delay(100)
             listState.animateScrollToItem(messages.lastIndex)
         }
     }
 
     Scaffold(
         topBar = {
-            Surface(
-                tonalElevation = 4.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "AI Coach",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
                             contentDescription = "Back"
                         )
                     }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                )
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            // Messages List - takes available space
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                if (messages.isEmpty()) {
                     Text(
-                        text = "AI Coach",
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.padding(start = 4.dp)
+                        text = "Start a conversation with your coach!",
+                        modifier = Modifier.align(Alignment.Center),
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                        textAlign = TextAlign.Center
                     )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 12.dp),
+                        state = listState,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        item { Spacer(modifier = Modifier.height(8.dp)) }
+
+                        items(messages, key = { it.id }) { msg ->
+                            ChatBubble(message = msg)
+                        }
+
+                        item { Spacer(modifier = Modifier.height(8.dp)) }
+                    }
                 }
             }
-        },
-        bottomBar = {
+
+            // Input Bar - stays at bottom
             ChatInputBar(
                 text = inputText,
                 onTextChange = { inputText = it },
@@ -126,34 +201,6 @@ fun AICoachScreen(
                 }
             )
         }
-
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
-        ) {
-            if (messages.isEmpty()) {
-                Text(
-                    text = "Start a conversation with your coach!",
-                    modifier = Modifier.align(Alignment.Center),
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                    textAlign = TextAlign.Center
-                )
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    state = listState
-                ) {
-                    items(messages, key = { it.id }) { msg ->
-                        ChatBubble(message = msg)
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -164,7 +211,7 @@ private fun ChatBubble(message: AIMessage) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 2.dp),
         horizontalArrangement = if (message.isFromUser) {
             Arrangement.End
         } else {
@@ -179,17 +226,19 @@ private fun ChatBubble(message: AIMessage) {
             shape = RoundedCornerShape(
                 topStart = 16.dp,
                 topEnd = 16.dp,
-                bottomEnd = if (message.isFromUser) 0.dp else 16.dp,
-                bottomStart = if (message.isFromUser) 16.dp else 0.dp
-            )
+                bottomEnd = if (message.isFromUser) 4.dp else 16.dp,
+                bottomStart = if (message.isFromUser) 16.dp else 4.dp
+            ),
+            modifier = Modifier.fillMaxWidth(0.85f)
         ) {
             Text(
                 text = message.content,
-                modifier = Modifier.padding(10.dp),
+                modifier = Modifier.padding(12.dp),
                 color = if (message.isFromUser)
                     Color.White
                 else
-                    MaterialTheme.colorScheme.onSurfaceVariant
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium
             )
         }
     }
@@ -202,28 +251,41 @@ private fun ChatInputBar(
     onSendClick: () -> Unit
 ) {
     Surface(
-        tonalElevation = 3.dp
+        tonalElevation = 3.dp,
+        shadowElevation = 8.dp,
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.Bottom
         ) {
             OutlinedTextField(
                 value = text,
                 onValueChange = onTextChange,
                 modifier = Modifier.weight(1f),
                 placeholder = { Text("Ask your coach...") },
-                maxLines = 4
+                maxLines = 4,
+                shape = RoundedCornerShape(24.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                )
             )
+
             IconButton(
                 onClick = onSendClick,
-                enabled = text.isNotBlank()
+                enabled = text.isNotBlank(),
+                modifier = Modifier.padding(start = 4.dp)
             ) {
                 Icon(
                     imageVector = Icons.Filled.Send,
-                    contentDescription = "Send"
+                    contentDescription = "Send",
+                    tint = if (text.isNotBlank())
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
                 )
             }
         }
@@ -284,13 +346,13 @@ private fun generateCoachReply(userMessage: String): String {
         """.trimIndent()
 
         listOf("motivate", "motivation", "hard", "stuck", "lazy").any { it in msg } -> """
-            🌟 You’re doing better than you think.
+            🌟 You're doing better than you think.
 
             Progress is built from tiny daily actions, not perfection.  
             Even 5 minutes of effort keeps your momentum alive.  
 
             Pick ONE small task you can do in the next 10 minutes.  
-            Do it, and tell me when you’re done — we’ll build from there 💪
+            Do it, and tell me when you're done — we'll build from there 💪
         """.trimIndent()
 
         else -> """

@@ -2,13 +2,14 @@ package com.mobile.habittrackernew.ui.screens.progress
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.mobile.habittrackernew.data.models.Category
+import com.mobile.habittrackernew.data.models.Habit
 import com.mobile.habittrackernew.data.models.HabitLog
 import com.mobile.habittrackernew.data.repository.HabitRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -17,9 +18,10 @@ import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 data class ProgressUiState(
+    val habits: List<Habit> = emptyList(),
     val totalCompleted: Int = 0,
-    val streaks: Map<String, Int> = emptyMap(),
-    val completionRates: Map<String, Float> = emptyMap(),
+    val streaks: Map<Long, Int> = emptyMap(),
+    val completionRates: Map<Long, Float> = emptyMap(),
     val monthLogs: List<HabitLog> = emptyList(),
     val dailyBreakdown: Map<String, List<HabitLog>> = emptyMap(),
     val isLoading: Boolean = true
@@ -43,33 +45,57 @@ class ProgressViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
 
-            val allStreaks = repository.getAllStreaks()
-            val streakMap = allStreaks.mapValues { it.value.currentStreak }
-
-            val today = LocalDate.now()
-            val thirtyDaysAgo = today.minusDays(30)
-
-            repository.getLogsByDateRange(
-                thirtyDaysAgo.format(dateFormatter),
-                today.format(dateFormatter)
-            ).collect { logs ->
-                val totalCompleted = logs.count { it.isCompleted }
-
-                val completionRates = Category.entries.associate { category ->
-                    val categoryLogs = logs.filter { it.category == category.name }
-                    val completed = categoryLogs.count { it.isCompleted }
-                    val total = 30
-                    category.name to (completed.toFloat() / total)
+            // Get user's habits
+            repository.getAllActiveHabits().collect { habits ->
+                if (habits.isEmpty()) {
+                    _uiState.update {
+                        it.copy(
+                            habits = emptyList(),
+                            isLoading = false
+                        )
+                    }
+                    return@collect
                 }
 
-                val dailyBreakdown = logs.groupBy { it.date }
+                // Calculate streaks for each habit
+                val streaks = mutableMapOf<Long, Int>()
+                val completionRates = mutableMapOf<Long, Float>()
+
+                habits.forEach { habit ->
+                    val streakInfo = repository.calculateStreakForHabit(habit.id)
+                    streaks[habit.id] = streakInfo.currentStreak
+
+                    val rate = repository.getCompletionRateForHabit(habit.id, 30)
+                    completionRates[habit.id] = rate
+                }
+
+                // Get all logs for total completed
+                val allLogs = repository.getAllLogs().first()
+                val totalCompleted = allLogs.count { it.isCompleted }
+
+                // Get month logs
+                val currentMonth = YearMonth.now()
+                val monthStart = currentMonth.atDay(1).format(dateFormatter)
+                val monthEnd = currentMonth.atEndOfMonth().format(dateFormatter)
+                val monthLogs = repository.getLogsByDateRange(monthStart, monthEnd).first()
+
+                // Daily breakdown (last 14 days)
+                val today = LocalDate.now()
+                val twoWeeksAgo = today.minusDays(13)
+                val recentLogs = repository.getLogsByDateRange(
+                    twoWeeksAgo.format(dateFormatter),
+                    today.format(dateFormatter)
+                ).first()
+
+                val dailyBreakdown = recentLogs.groupBy { it.date }
 
                 _uiState.update {
                     it.copy(
+                        habits = habits,
                         totalCompleted = totalCompleted,
-                        streaks = streakMap,
+                        streaks = streaks,
                         completionRates = completionRates,
-                        monthLogs = logs,
+                        monthLogs = monthLogs,
                         dailyBreakdown = dailyBreakdown,
                         isLoading = false
                     )
@@ -80,13 +106,12 @@ class ProgressViewModel @Inject constructor(
 
     fun loadMonthData(yearMonth: YearMonth) {
         viewModelScope.launch {
-            val startDate = yearMonth.atDay(1).format(dateFormatter)
-            val endDate = yearMonth.atEndOfMonth().format(dateFormatter)
+            val monthStart = yearMonth.atDay(1).format(dateFormatter)
+            val monthEnd = yearMonth.atEndOfMonth().format(dateFormatter)
+            val monthLogs = repository.getLogsByDateRange(monthStart, monthEnd).first()
 
-            repository.getLogsByDateRange(startDate, endDate).collect { logs ->
-                _uiState.update {
-                    it.copy(monthLogs = logs)
-                }
+            _uiState.update {
+                it.copy(monthLogs = monthLogs)
             }
         }
     }

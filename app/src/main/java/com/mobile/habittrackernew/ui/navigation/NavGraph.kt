@@ -1,14 +1,12 @@
 package com.mobile.habittrackernew.ui.navigation
 
-import android.app.Activity
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Psychology
@@ -33,36 +31,43 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.mobile.habittrackernew.ui.screens.aicoach.AICoachScreen
+import com.mobile.habittrackernew.ui.screens.alarms.AlarmsScreen
 import com.mobile.habittrackernew.ui.screens.auth.AuthViewModel
 import com.mobile.habittrackernew.ui.screens.auth.LoginScreen
 import com.mobile.habittrackernew.ui.screens.auth.SignupScreen
-import com.mobile.habittrackernew.ui.screens.category.CategoryScreen
+import com.mobile.habittrackernew.ui.screens.category.HabitDetailScreen
 import com.mobile.habittrackernew.ui.screens.dashboard.DashboardScreen
 import com.mobile.habittrackernew.ui.screens.notifications.NotificationsScreen
 import com.mobile.habittrackernew.ui.screens.progress.ProgressScreen
 import com.mobile.habittrackernew.ui.screens.settings.SettingsScreen
+import com.mobile.habittrackernew.ui.screens.splash.SplashScreen
+import com.mobile.habittrackernew.ui.screens.permissions.PermissionScreen
 
 sealed class Screen(
     val route: String,
     val title: String,
     val icon: ImageVector? = null
 ) {
+    object Splash : Screen("splash", "Splash")
     object Login : Screen("login", "Login")
     object Signup : Screen("signup", "Sign Up")
     object Dashboard : Screen("dashboard", "Home", Icons.Default.Home)
     object Progress : Screen("progress", "Progress", Icons.Default.BarChart)
     object AICoach : Screen("ai_coach", "AI Coach", Icons.Default.Psychology)
+    object Alarms : Screen("alarms", "Alarms", Icons.Default.Alarm)
     object Settings : Screen("settings", "Settings", Icons.Default.Settings)
     object Notifications : Screen("notifications", "Notifications")
-    object Category : Screen("category/{categoryName}", "Category") {
-        fun createRoute(categoryName: String) = "category/$categoryName"
+    object HabitDetail : Screen("habit/{habitId}", "Habit") {
+        fun createRoute(habitId: Long) = "habit/$habitId"
     }
 }
 
+// Updated bottom nav items - Alarms is now included
 val bottomNavItems = listOf(
     Screen.Dashboard,
     Screen.Progress,
     Screen.AICoach,
+    Screen.Alarms,
     Screen.Settings
 )
 
@@ -75,7 +80,8 @@ fun HabitTrackerNavHost(
     val currentDestination = navBackStackEntry?.destination
     val authState by authViewModel.uiState.collectAsState()
 
-    val startDestination = if (authState.isLoggedIn) Screen.Dashboard.route else Screen.Login.route
+    // Always start with splash screen
+    val startDestination = Screen.Splash.route
 
     val showBottomBar = currentDestination?.route in bottomNavItems.map { it.route }
 
@@ -117,6 +123,26 @@ fun HabitTrackerNavHost(
             startDestination = startDestination,
             modifier = Modifier.padding(innerPadding)
         ) {
+            // Splash Screen
+            composable(
+                route = Screen.Splash.route,
+                enterTransition = { fadeIn() },
+                exitTransition = { fadeOut() }
+            ) {
+                SplashScreen(
+                    onSplashComplete = {
+                        val destination = if (authState.isLoggedIn) {
+                            Screen.Dashboard.route
+                        } else {
+                            Screen.Login.route
+                        }
+                        navController.navigate(destination) {
+                            popUpTo(Screen.Splash.route) { inclusive = true }
+                        }
+                    }
+                )
+            }
+
             // Auth Screens
             composable(
                 route = Screen.Login.route,
@@ -159,8 +185,8 @@ fun HabitTrackerNavHost(
                 exitTransition = { fadeOut() }
             ) {
                 DashboardScreen(
-                    onCategoryClick = { category ->
-                        navController.navigate(Screen.Category.createRoute(category.name))
+                    onHabitClick = { habitId ->
+                        navController.navigate(Screen.HabitDetail.createRoute(habitId))
                     },
                     onNotificationClick = {
                         navController.navigate(Screen.Notifications.route)
@@ -182,8 +208,17 @@ fun HabitTrackerNavHost(
                 exitTransition = { fadeOut() }
             ) {
                 AICoachScreen(
-                    onBack = {navController.popBackStack()}
+                    onBack = { navController.popBackStack() }
                 )
+            }
+
+            // Alarms Screen - Now a main tab
+            composable(
+                route = Screen.Alarms.route,
+                enterTransition = { fadeIn() },
+                exitTransition = { fadeOut() }
+            ) {
+                AlarmsScreen()
             }
 
             composable(
@@ -199,6 +234,9 @@ fun HabitTrackerNavHost(
                         navController.navigate(Screen.Login.route) {
                             popUpTo(0) { inclusive = true }
                         }
+                    },
+                    onAlarmsClick = {
+                        navController.navigate(Screen.Alarms.route)
                     }
                 )
             }
@@ -214,17 +252,18 @@ fun HabitTrackerNavHost(
                 )
             }
 
+            // Habit Detail Screen
             composable(
-                route = Screen.Category.route,
+                route = Screen.HabitDetail.route,
                 arguments = listOf(
-                    navArgument("categoryName") { type = NavType.StringType }
+                    navArgument("habitId") { type = NavType.LongType }
                 ),
                 enterTransition = { slideInHorizontally(initialOffsetX = { 1000 }) },
                 exitTransition = { slideOutHorizontally(targetOffsetX = { 1000 }) }
             ) { backStackEntry ->
-                val categoryName = backStackEntry.arguments?.getString("categoryName") ?: ""
-                CategoryScreen(
-                    categoryName = categoryName,
+                val habitId = backStackEntry.arguments?.getLong("habitId") ?: 0L
+                HabitDetailScreen(
+                    habitId = habitId,
                     onBackClick = { navController.popBackStack() }
                 )
             }

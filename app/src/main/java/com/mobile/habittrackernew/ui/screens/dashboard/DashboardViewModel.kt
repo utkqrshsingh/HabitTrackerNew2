@@ -2,7 +2,7 @@ package com.mobile.habittrackernew.ui.screens.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.mobile.habittrackernew.data.models.Category
+import com.mobile.habittrackernew.data.models.Habit
 import com.mobile.habittrackernew.data.models.StreakInfo
 import com.mobile.habittrackernew.data.repository.HabitRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -16,8 +16,9 @@ import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 data class DashboardUiState(
-    val streaks: Map<String, StreakInfo> = emptyMap(),
-    val todayCompletions: Map<String, Boolean> = emptyMap(),
+    val habits: List<Habit> = emptyList(),
+    val streaks: Map<Long, StreakInfo> = emptyMap(),
+    val todayCompletions: Map<Long, Boolean> = emptyMap(),
     val todayCompletedCount: Int = 0,
     val isLoading: Boolean = true
 )
@@ -34,27 +35,34 @@ class DashboardViewModel @Inject constructor(
     private val today = LocalDate.now().format(dateFormatter)
 
     init {
-        loadData()
+        seedDefaultHabitsAndLoad()
+    }
+
+    private fun seedDefaultHabitsAndLoad() {
+        viewModelScope.launch {
+            repository.seedDefaultHabitsIfNeeded()
+            loadData()
+        }
     }
 
     private fun loadData() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
 
-            val streaks = repository.getAllStreaks()
+            repository.getAllActiveHabits().collect { habits ->
+                val streaks = repository.getAllStreaksForHabits()
+                val completions = mutableMapOf<Long, Boolean>()
 
-            repository.getLogsByDate(today).collect { logs ->
-                val completions = mutableMapOf<String, Boolean>()
-
-                Category.values().forEach { category ->
-                    val log = logs.find { it.category == category.name }
-                    completions[category.name] = log?.isCompleted ?: false
+                habits.forEach { habit ->
+                    val log = repository.getLogByHabitIdAndDate(habit.id, today)
+                    completions[habit.id] = log?.isCompleted ?: false
                 }
 
                 val completedCount = completions.values.count { it }
 
                 _uiState.update {
                     it.copy(
+                        habits = habits,
                         streaks = streaks,
                         todayCompletions = completions,
                         todayCompletedCount = completedCount,
@@ -65,17 +73,17 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
-    fun toggleHabitCompletion(category: String) {
+    fun toggleHabitCompletion(habit: Habit) {
         viewModelScope.launch {
-            val isCompleted = repository.toggleHabitCompletion(category, today)
+            val isCompleted = repository.toggleHabitCompletion(habit.id, habit.name, today)
 
             _uiState.update { state ->
                 val updatedCompletions = state.todayCompletions.toMutableMap()
-                updatedCompletions[category] = isCompleted
+                updatedCompletions[habit.id] = isCompleted
 
-                val newStreak = repository.calculateStreak(category)
+                val newStreak = repository.calculateStreakForHabit(habit.id)
                 val updatedStreaks = state.streaks.toMutableMap()
-                updatedStreaks[category] = newStreak
+                updatedStreaks[habit.id] = newStreak
 
                 state.copy(
                     todayCompletions = updatedCompletions,
@@ -83,6 +91,27 @@ class DashboardViewModel @Inject constructor(
                     streaks = updatedStreaks
                 )
             }
+        }
+    }
+
+    fun addHabit(habit: Habit) {
+        viewModelScope.launch {
+            repository.insertHabit(habit)
+            // Data will auto-refresh through Flow
+        }
+    }
+
+    fun updateHabit(habit: Habit) {
+        viewModelScope.launch {
+            repository.updateHabit(habit)
+            // Data will auto-refresh through Flow
+        }
+    }
+
+    fun deleteHabit(habit: Habit) {
+        viewModelScope.launch {
+            repository.deleteHabit(habit.id)
+            // Data will auto-refresh through Flow
         }
     }
 

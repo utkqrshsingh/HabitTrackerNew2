@@ -22,14 +22,14 @@ data class SettingsUiState(
     val eveningReminder: String = "20:00",
     val showLogoutDialog: Boolean = false,
     val showClearDataDialog: Boolean = false,
-    val isLoading: Boolean = true,
-    val logoutSuccess: Boolean = false
+    val logoutSuccess: Boolean = false,
+    val isLoading: Boolean = false
 )
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val preferencesManager: PreferencesManager,
-    private val repository: HabitRepository
+    private val habitRepository: HabitRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -41,23 +41,36 @@ class SettingsViewModel @Inject constructor(
 
     private fun loadSettings() {
         viewModelScope.launch {
-            val userName = preferencesManager.userName.first()
-            val userEmail = preferencesManager.userEmail.first()
-            val isDarkMode = preferencesManager.isDarkMode.first()
-            val notificationsEnabled = preferencesManager.notificationsEnabled.first()
-            val morningReminder = preferencesManager.morningReminder.first()
-            val eveningReminder = preferencesManager.eveningReminder.first()
-
-            _uiState.update {
-                it.copy(
-                    userName = userName,
-                    userEmail = userEmail,
-                    isDarkMode = isDarkMode,
-                    notificationsEnabled = notificationsEnabled,
-                    morningReminder = morningReminder,
-                    eveningReminder = eveningReminder,
-                    isLoading = false
-                )
+            // Collect all preferences
+            launch {
+                preferencesManager.userName.collect { name ->
+                    _uiState.update { it.copy(userName = name) }
+                }
+            }
+            launch {
+                preferencesManager.userEmail.collect { email ->
+                    _uiState.update { it.copy(userEmail = email) }
+                }
+            }
+            launch {
+                preferencesManager.isDarkMode.collect { isDark ->
+                    _uiState.update { it.copy(isDarkMode = isDark) }
+                }
+            }
+            launch {
+                preferencesManager.notificationsEnabled.collect { enabled ->
+                    _uiState.update { it.copy(notificationsEnabled = enabled) }
+                }
+            }
+            launch {
+                preferencesManager.morningReminder.collect { time ->
+                    _uiState.update { it.copy(morningReminder = time) }
+                }
+            }
+            launch {
+                preferencesManager.eveningReminder.collect { time ->
+                    _uiState.update { it.copy(eveningReminder = time) }
+                }
             }
         }
     }
@@ -66,7 +79,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val newValue = !_uiState.value.isDarkMode
             preferencesManager.setDarkMode(newValue)
-            _uiState.update { it.copy(isDarkMode = newValue) }
+            // UI will update automatically through the flow
         }
     }
 
@@ -74,28 +87,24 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val newValue = !_uiState.value.notificationsEnabled
             preferencesManager.setNotificationsEnabled(newValue)
-            _uiState.update { it.copy(notificationsEnabled = newValue) }
         }
     }
 
     fun setMorningReminder(time: String) {
         viewModelScope.launch {
             preferencesManager.setMorningReminder(time)
-            _uiState.update { it.copy(morningReminder = time) }
         }
     }
 
     fun setEveningReminder(time: String) {
         viewModelScope.launch {
             preferencesManager.setEveningReminder(time)
-            _uiState.update { it.copy(eveningReminder = time) }
         }
     }
 
     fun updateUserName(name: String) {
         viewModelScope.launch {
             preferencesManager.updateUserName(name)
-            _uiState.update { it.copy(userName = name) }
         }
     }
 
@@ -109,9 +118,11 @@ class SettingsViewModel @Inject constructor(
 
     fun logout() {
         viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
             preferencesManager.logout()
             _uiState.update {
                 it.copy(
+                    isLoading = false,
                     showLogoutDialog = false,
                     logoutSuccess = true
                 )
@@ -121,9 +132,15 @@ class SettingsViewModel @Inject constructor(
 
     fun clearAllData() {
         viewModelScope.launch {
-            repository.clearAIMessages()
-            // Clear other data as needed
-            _uiState.update { it.copy(showClearDataDialog = false) }
+            _uiState.update { it.copy(isLoading = true) }
+            habitRepository.deleteAllHabits()
+            habitRepository.deleteAllHabitLogs()
+            _uiState.update {
+                it.copy(
+                    isLoading = false,
+                    showClearDataDialog = false
+                )
+            }
         }
     }
 }
