@@ -4,11 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mobile.habittrackernew.data.preferences.PreferencesManager
 import com.mobile.habittrackernew.data.repository.HabitRepository
+import com.mobile.habittrackernew.services.NotificationHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -29,11 +29,17 @@ data class SettingsUiState(
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val preferencesManager: PreferencesManager,
-    private val habitRepository: HabitRepository
+    private val habitRepository: HabitRepository,
+    private val notificationHelper: NotificationHelper // 👈 ADD THIS
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+
+    companion object {
+        const val MORNING_NOTIFICATION_ID = 1001
+        const val EVENING_NOTIFICATION_ID = 1003
+    }
 
     init {
         loadSettings()
@@ -41,7 +47,6 @@ class SettingsViewModel @Inject constructor(
 
     private fun loadSettings() {
         viewModelScope.launch {
-            // Collect all preferences
             launch {
                 preferencesManager.userName.collect { name ->
                     _uiState.update { it.copy(userName = name) }
@@ -60,6 +65,12 @@ class SettingsViewModel @Inject constructor(
             launch {
                 preferencesManager.notificationsEnabled.collect { enabled ->
                     _uiState.update { it.copy(notificationsEnabled = enabled) }
+                    // Schedule or cancel notifications based on toggle
+                    if (enabled) {
+                        scheduleAllReminders()
+                    } else {
+                        cancelAllReminders()
+                    }
                 }
             }
             launch {
@@ -79,7 +90,6 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val newValue = !_uiState.value.isDarkMode
             preferencesManager.setDarkMode(newValue)
-            // UI will update automatically through the flow
         }
     }
 
@@ -87,19 +97,79 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val newValue = !_uiState.value.notificationsEnabled
             preferencesManager.setNotificationsEnabled(newValue)
+
+            if (newValue) {
+                scheduleAllReminders()
+            } else {
+                cancelAllReminders()
+            }
         }
     }
 
     fun setMorningReminder(time: String) {
         viewModelScope.launch {
             preferencesManager.setMorningReminder(time)
+            // Schedule the notification! 👈 THIS WAS MISSING
+            scheduleMorningReminder(time)
         }
     }
 
     fun setEveningReminder(time: String) {
         viewModelScope.launch {
             preferencesManager.setEveningReminder(time)
+            // Schedule the notification! 👈 THIS WAS MISSING
+            scheduleEveningReminder(time)
         }
+    }
+
+    private fun scheduleMorningReminder(time: String) {
+        if (!_uiState.value.notificationsEnabled) return
+
+        try {
+            val parts = time.split(":")
+            val hour = parts[0].toInt()
+            val minute = parts[1].toInt()
+
+            notificationHelper.scheduleNotification(
+                title = "☀️ Good Morning!",
+                message = "Rise and shine! Time to crush your habits today!",
+                hour = hour,
+                minute = minute,
+                notificationId = MORNING_NOTIFICATION_ID
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun scheduleEveningReminder(time: String) {
+        if (!_uiState.value.notificationsEnabled) return
+
+        try {
+            val parts = time.split(":")
+            val hour = parts[0].toInt()
+            val minute = parts[1].toInt()
+
+            notificationHelper.scheduleNotification(
+                title = "🌙 Evening Check-in",
+                message = "End your day strong! Complete your remaining habits.",
+                hour = hour,
+                minute = minute,
+                notificationId = EVENING_NOTIFICATION_ID
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun scheduleAllReminders() {
+        scheduleMorningReminder(_uiState.value.morningReminder)
+        scheduleEveningReminder(_uiState.value.eveningReminder)
+    }
+
+    private fun cancelAllReminders() {
+        notificationHelper.cancelNotification(MORNING_NOTIFICATION_ID)
+        notificationHelper.cancelNotification(EVENING_NOTIFICATION_ID)
     }
 
     fun updateUserName(name: String) {
@@ -119,6 +189,7 @@ class SettingsViewModel @Inject constructor(
     fun logout() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
+            cancelAllReminders()
             preferencesManager.logout()
             _uiState.update {
                 it.copy(

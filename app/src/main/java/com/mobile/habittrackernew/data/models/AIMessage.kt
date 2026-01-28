@@ -9,5 +9,5 @@ data class AIMessage(
     val id: Long = 0,
     val content: String,
     val isFromUser: Boolean,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis()  // Changed from LocalDateTime to Long
 )

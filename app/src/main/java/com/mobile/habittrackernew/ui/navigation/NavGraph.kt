@@ -1,3 +1,4 @@
+// ui/navigation/NavGraph.kt
 package com.mobile.habittrackernew.ui.navigation
 
 import androidx.compose.animation.fadeIn
@@ -17,8 +18,12 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -41,7 +46,7 @@ import com.mobile.habittrackernew.ui.screens.notifications.NotificationsScreen
 import com.mobile.habittrackernew.ui.screens.progress.ProgressScreen
 import com.mobile.habittrackernew.ui.screens.settings.SettingsScreen
 import com.mobile.habittrackernew.ui.screens.splash.SplashScreen
-import com.mobile.habittrackernew.ui.screens.permissions.PermissionScreen
+import kotlinx.coroutines.delay
 
 sealed class Screen(
     val route: String,
@@ -62,7 +67,6 @@ sealed class Screen(
     }
 }
 
-// Updated bottom nav items - Alarms is now included
 val bottomNavItems = listOf(
     Screen.Dashboard,
     Screen.Progress,
@@ -79,9 +83,6 @@ fun HabitTrackerNavHost(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
     val authState by authViewModel.uiState.collectAsState()
-
-    // Always start with splash screen
-    val startDestination = Screen.Splash.route
 
     val showBottomBar = currentDestination?.route in bottomNavItems.map { it.route }
 
@@ -120,7 +121,7 @@ fun HabitTrackerNavHost(
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = startDestination,
+            startDestination = Screen.Splash.route,
             modifier = Modifier.padding(innerPadding)
         ) {
             // Splash Screen
@@ -130,8 +131,8 @@ fun HabitTrackerNavHost(
                 exitTransition = { fadeOut() }
             ) {
                 SplashScreen(
-                    onSplashComplete = {
-                        val destination = if (authState.isLoggedIn) {
+                    onSplashComplete = { isLoggedIn ->
+                        val destination = if (isLoggedIn) {
                             Screen.Dashboard.route
                         } else {
                             Screen.Login.route
@@ -212,7 +213,6 @@ fun HabitTrackerNavHost(
                 )
             }
 
-            // Alarms Screen - Now a main tab
             composable(
                 route = Screen.Alarms.route,
                 enterTransition = { fadeIn() },

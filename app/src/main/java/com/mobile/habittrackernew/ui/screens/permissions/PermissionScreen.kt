@@ -234,7 +234,7 @@ fun PermissionScreen(
         val grantedCount = getGrantedCount(permissionStatus)
 
         LinearProgressIndicator(
-            progress = { grantedCount.toFloat() / actualTotal.toFloat() },
+            progress = grantedCount.toFloat() / actualTotal.toFloat(),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(8.dp)

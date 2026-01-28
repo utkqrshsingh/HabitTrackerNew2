@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverters
 import com.mobile.habittrackernew.data.models.*
 
 @Database(
@@ -14,9 +15,10 @@ import com.mobile.habittrackernew.data.models.*
         AIMessage::class,
         Alarm::class
     ],
-    version = 4, // Changed from 3 to 4
+    version = 5,  // Increment version
     exportSchema = false
 )
+@TypeConverters(Converters::class)  // ADD THIS LINE
 abstract class AppDatabase : RoomDatabase() {
     abstract fun habitDao(): HabitDao
     abstract fun habitLogDao(): HabitLogDao

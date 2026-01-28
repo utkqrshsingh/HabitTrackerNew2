@@ -539,7 +539,7 @@ fun AlarmCard(
             ) {
                 Column {
                     Spacer(modifier = Modifier.height(12.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                    Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
 
                     Row(
                         modifier = Modifier

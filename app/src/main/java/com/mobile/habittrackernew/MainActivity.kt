@@ -16,10 +16,15 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import com.mobile.habittrackernew.data.preferences.PreferencesManager
+import com.mobile.habittrackernew.services.NotificationHelper
 import com.mobile.habittrackernew.services.PermissionManager
 import com.mobile.habittrackernew.ui.navigation.HabitTrackerNavHost
 import com.mobile.habittrackernew.ui.theme.HabitTrackerTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -28,19 +33,19 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var preferencesManager: PreferencesManager
 
+    @Inject
+    lateinit var notificationHelper: NotificationHelper
+
     private lateinit var permissionManager: PermissionManager
 
-    // Track if we've already requested overlay permission this session
     private var hasRequestedOverlay = false
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            // Continue with other permissions
             requestBatteryOptimization()
         } else {
-            // Still try to request other permissions
             requestBatteryOptimization()
         }
     }
@@ -50,6 +55,9 @@ class MainActivity : ComponentActivity() {
 
         permissionManager = PermissionManager(this)
         requestPermissionsIfNeeded()
+
+        // Schedule reminders on app start
+        scheduleRemindersIfEnabled()
 
         setContent {
             val isDarkMode by preferencesManager.isDarkMode.collectAsState(initial = false)
@@ -67,7 +75,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Check overlay permission when user comes back from settings
         checkOverlayPermissionOnResume()
     }
 
@@ -86,7 +93,7 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        // Step 3: Overlay permission (Display over other apps) - CRITICAL!
+        // Step 3: Overlay permission (Display over other apps)
         if (!permissionManager.hasOverlayPermission() && !hasRequestedOverlay) {
             requestOverlayPermission()
             return
@@ -112,7 +119,6 @@ class MainActivity : ComponentActivity() {
 
         // After battery, request overlay
         if (!permissionManager.hasOverlayPermission() && !hasRequestedOverlay) {
-            // Small delay to avoid multiple dialogs at once
             window.decorView.postDelayed({
                 requestOverlayPermission()
             }, 500)
@@ -152,12 +158,67 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkOverlayPermissionOnResume() {
-        // If user granted overlay permission, continue with other permissions
         if (hasRequestedOverlay && permissionManager.hasOverlayPermission()) {
-            // Check if we need exact alarm permission
             if (!permissionManager.hasExactAlarmPermission()) {
                 requestExactAlarmPermission()
             }
+        }
+    }
+
+    private fun scheduleRemindersIfEnabled() {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val notificationsEnabled = preferencesManager.notificationsEnabled.first()
+                if (notificationsEnabled) {
+                    val morningTime = preferencesManager.morningReminder.first()
+                    val eveningTime = preferencesManager.eveningReminder.first()
+
+                    scheduleMorningReminder(morningTime)
+                    scheduleEveningReminder(eveningTime)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private fun scheduleMorningReminder(time: String) {
+        try {
+            val parts = time.split(":")
+            if (parts.size == 2) {
+                val hour = parts[0].toInt()
+                val minute = parts[1].toInt()
+
+                notificationHelper.scheduleNotification(
+                    title = "☀️ Good Morning!",
+                    message = "Rise and shine! Time to crush your habits today!",
+                    hour = hour,
+                    minute = minute,
+                    notificationId = 1001
+                )
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun scheduleEveningReminder(time: String) {
+        try {
+            val parts = time.split(":")
+            if (parts.size == 2) {
+                val hour = parts[0].toInt()
+                val minute = parts[1].toInt()
+
+                notificationHelper.scheduleNotification(
+                    title = "🌙 Evening Check-in",
+                    message = "End your day strong! Complete your remaining habits.",
+                    hour = hour,
+                    minute = minute,
+                    notificationId = 1003
+                )
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 }

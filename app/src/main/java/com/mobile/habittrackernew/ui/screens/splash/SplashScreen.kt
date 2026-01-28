@@ -1,3 +1,4 @@
+// ui/screens/splash/SplashScreen.kt
 package com.mobile.habittrackernew.ui.screens.splash
 
 import androidx.compose.animation.core.*
@@ -22,15 +23,21 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.mobile.habittrackernew.ui.theme.GradientPurple
 import com.mobile.habittrackernew.ui.theme.PrimaryLight
 import kotlinx.coroutines.delay
 
 @Composable
 fun SplashScreen(
-    onSplashComplete: () -> Unit
+    onSplashComplete: (isLoggedIn: Boolean) -> Unit,  // Updated signature
+    viewModel: SplashViewModel = hiltViewModel()       // Added ViewModel
 ) {
     var startAnimation by remember { mutableStateOf(false) }
+
+    // Auth state from ViewModel
+    val isLoggedIn by viewModel.isLoggedIn.collectAsState()
+    val isCheckComplete by viewModel.isCheckComplete.collectAsState()
 
     // Logo scale animation
     val logoScale by animateFloatAsState(
@@ -92,12 +99,19 @@ fun SplashScreen(
         label = "particle2Y"
     )
 
+    // Start animations
     LaunchedEffect(Unit) {
         startAnimation = true
         delay(500)
         showText = true
-        delay(2000)
-        onSplashComplete()
+    }
+
+    // Navigate when auth check is complete (after minimum splash time)
+    LaunchedEffect(isCheckComplete) {
+        if (isCheckComplete) {
+            delay(2000) // Keep original 2 second splash duration
+            onSplashComplete(isLoggedIn)
+        }
     }
 
     Box(

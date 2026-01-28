@@ -1,3 +1,4 @@
+// data/preferences/PreferencesManager.kt
 package com.mobile.habittrackernew.data.preferences
 
 import android.content.Context
@@ -10,6 +11,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -34,9 +36,14 @@ class PreferencesManager @Inject constructor(
         private val EVENING_REMINDER = stringPreferencesKey("evening_reminder")
         private val NOTIFICATION_COUNT = intPreferencesKey("notification_count")
         private val USE_SYSTEM_THEME = booleanPreferencesKey("use_system_theme")
-        private val HAS_SEEDED_HABITS = booleanPreferencesKey("has_seeded_habits") // NEW
+        private val HAS_SEEDED_HABITS = booleanPreferencesKey("has_seeded_habits")
+
+        // NEW: Remember Me preferences
+        private val REMEMBER_ME = booleanPreferencesKey("remember_me")
+        private val SAVED_EMAIL = stringPreferencesKey("saved_email")
     }
 
+    // Existing flows...
     val isLoggedIn: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[IS_LOGGED_IN] ?: false
     }
@@ -77,11 +84,20 @@ class PreferencesManager @Inject constructor(
         prefs[NOTIFICATION_COUNT] ?: 0
     }
 
-    // NEW: Check if habits have been seeded
     val hasSeededHabits: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[HAS_SEEDED_HABITS] ?: false
     }
 
+    // NEW: Remember Me flows
+    val rememberMe: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[REMEMBER_ME] ?: false
+    }
+
+    val savedEmail: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[SAVED_EMAIL] ?: ""
+    }
+
+    // Existing functions...
     suspend fun setLoggedIn(
         isLoggedIn: Boolean,
         userId: String = "",
@@ -160,20 +176,47 @@ class PreferencesManager @Inject constructor(
         }
     }
 
-    // NEW: Mark habits as seeded
     suspend fun setHasSeededHabits(seeded: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[HAS_SEEDED_HABITS] = seeded
         }
     }
 
+    // NEW: Remember Me functions
+    suspend fun setRememberMe(remember: Boolean, email: String = "") {
+        context.dataStore.edit { prefs ->
+            prefs[REMEMBER_ME] = remember
+            if (remember && email.isNotBlank()) {
+                prefs[SAVED_EMAIL] = email
+            } else if (!remember) {
+                prefs[SAVED_EMAIL] = ""
+            }
+        }
+    }
+
+    suspend fun getSavedEmail(): String {
+        return context.dataStore.data.map { prefs ->
+            prefs[SAVED_EMAIL] ?: ""
+        }.first()
+    }
+
     suspend fun logout() {
         context.dataStore.edit { prefs ->
+            val rememberMe = prefs[REMEMBER_ME] ?: false
+            val savedEmail = prefs[SAVED_EMAIL] ?: ""
+
+            // Clear login state
             prefs[IS_LOGGED_IN] = false
             prefs[USER_ID] = ""
             prefs[USER_NAME] = ""
             prefs[USER_EMAIL] = ""
             prefs[USER_PHOTO] = ""
+
+            // Keep remember me settings if enabled
+            if (rememberMe) {
+                prefs[REMEMBER_ME] = true
+                prefs[SAVED_EMAIL] = savedEmail
+            }
         }
     }
 

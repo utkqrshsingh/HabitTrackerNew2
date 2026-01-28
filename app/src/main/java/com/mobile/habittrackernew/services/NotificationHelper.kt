@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.mobile.habittrackernew.HabitTrackerApplication
@@ -49,6 +50,10 @@ class NotificationHelper @Inject constructor(
     private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
 
+    companion object {
+        private const val TAG = "NotificationHelper"
+    }
+
     fun hasNotificationPermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(
@@ -69,9 +74,14 @@ class NotificationHelper @Inject constructor(
         message: String,
         notificationId: Int = System.currentTimeMillis().toInt()
     ) {
-        // Check if notifications are enabled in preferences
-        if (!areNotificationsEnabled()) return
-        if (!hasNotificationPermission()) return
+        if (!areNotificationsEnabled()) {
+            Log.d(TAG, "Notifications disabled in preferences")
+            return
+        }
+        if (!hasNotificationPermission()) {
+            Log.d(TAG, "No notification permission")
+            return
+        }
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -95,8 +105,8 @@ class NotificationHelper @Inject constructor(
             .build()
 
         notificationManager.notify(notificationId, notification)
+        Log.d(TAG, "Notification shown: $title")
 
-        // Increment notification count
         coroutineScope.launch {
             preferencesManager.incrementNotificationCount()
         }
@@ -109,8 +119,12 @@ class NotificationHelper @Inject constructor(
         minute: Int,
         notificationId: Int
     ) {
-        // Check if notifications are enabled
-        if (!areNotificationsEnabled()) return
+        if (!areNotificationsEnabled()) {
+            Log.d(TAG, "Notifications disabled, not scheduling")
+            return
+        }
+
+        Log.d(TAG, "Scheduling notification: $title at $hour:$minute (ID: $notificationId)")
 
         val intent = Intent(context, NotificationReceiver::class.java).apply {
             putExtra("title", title)
@@ -129,21 +143,60 @@ class NotificationHelper @Inject constructor(
             set(Calendar.HOUR_OF_DAY, hour)
             set(Calendar.MINUTE, minute)
             set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
 
+            // If time has passed today, schedule for tomorrow
             if (timeInMillis <= System.currentTimeMillis()) {
                 add(Calendar.DAY_OF_MONTH, 1)
             }
         }
 
-        alarmManager.setRepeating(
-            AlarmManager.RTC_WAKEUP,
-            calendar.timeInMillis,
-            AlarmManager.INTERVAL_DAY,
-            pendingIntent
-        )
+        try {
+            // Cancel any existing alarm first
+            alarmManager.cancel(pendingIntent)
+
+            // Use setAlarmClock for reliable delivery (shows alarm icon in status bar)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                if (alarmManager.canScheduleExactAlarms()) {
+                    alarmManager.setAlarmClock(
+                        AlarmManager.AlarmClockInfo(calendar.timeInMillis, pendingIntent),
+                        pendingIntent
+                    )
+                    Log.d(TAG, "Scheduled with setAlarmClock")
+                } else {
+                    // Fallback for when exact alarms not permitted
+                    alarmManager.setAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        calendar.timeInMillis,
+                        pendingIntent
+                    )
+                    Log.d(TAG, "Scheduled with setAndAllowWhileIdle")
+                }
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setAlarmClock(
+                    AlarmManager.AlarmClockInfo(calendar.timeInMillis, pendingIntent),
+                    pendingIntent
+                )
+                Log.d(TAG, "Scheduled with setAlarmClock (pre-S)")
+            } else {
+                alarmManager.setExact(
+                    AlarmManager.RTC_WAKEUP,
+                    calendar.timeInMillis,
+                    pendingIntent
+                )
+                Log.d(TAG, "Scheduled with setExact")
+            }
+
+            Log.d(TAG, "Notification scheduled for: ${calendar.time}")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error scheduling notification", e)
+        }
     }
 
     fun cancelNotification(notificationId: Int) {
+        Log.d(TAG, "Cancelling notification ID: $notificationId")
+
         val intent = Intent(context, NotificationReceiver::class.java)
         val pendingIntent = PendingIntent.getBroadcast(
             context,
@@ -156,12 +209,9 @@ class NotificationHelper @Inject constructor(
     }
 
     fun cancelAllNotifications() {
-        // Cancel all known notification IDs
         cancelNotification(1001) // Morning
         cancelNotification(1002) // Midday
         cancelNotification(1003) // Evening
-
-        // Clear all displayed notifications
         notificationManager.cancelAll()
     }
 

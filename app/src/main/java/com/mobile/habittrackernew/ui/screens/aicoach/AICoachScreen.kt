@@ -1,112 +1,45 @@
 package com.mobile.habittrackernew.ui.screens.aicoach
 
-import android.view.ViewTreeObserver
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.State
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-
-// ---------- MODEL ----------
-
-data class AIMessage(
-    val id: Long = System.currentTimeMillis(),
-    val content: String,
-    val isFromUser: Boolean
-)
-
-// ---------- KEYBOARD STATE HELPER ----------
-
-@Composable
-fun rememberKeyboardVisibility(): State<Boolean> {
-    val view = LocalView.current
-    val isKeyboardOpen = remember { mutableStateOf(false) }
-
-    DisposableEffect(view) {
-        val listener = ViewTreeObserver.OnGlobalLayoutListener {
-            val insets = ViewCompat.getRootWindowInsets(view)
-            val imeVisible = insets?.isVisible(WindowInsetsCompat.Type.ime()) ?: false
-            isKeyboardOpen.value = imeVisible
-        }
-        view.viewTreeObserver.addOnGlobalLayoutListener(listener)
-        onDispose {
-            view.viewTreeObserver.removeOnGlobalLayoutListener(listener)
-        }
-    }
-
-    return isKeyboardOpen
-}
-
-// ---------- MAIN SCREEN ----------
+import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.mobile.habittrackernew.ui.theme.GradientPurple
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AICoachScreen(
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    viewModel: AICoachViewModel = hiltViewModel()
 ) {
-    val messages = remember {
-        mutableStateListOf(
-            AIMessage(
-                content = "👋 Hi, I'm your AI coach. Ask me for a diet plan, workout routine, sleep schedule, or motivation!",
-                isFromUser = false
-            )
-        )
-    }
-
-    var inputText by remember { mutableStateOf("") }
+    val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
-    val isKeyboardVisible by rememberKeyboardVisibility()
 
-    // Scroll to bottom when new message added or keyboard opens
-    LaunchedEffect(messages.size, isKeyboardVisible) {
-        if (messages.isNotEmpty()) {
-            delay(100)
-            listState.animateScrollToItem(messages.lastIndex)
+    LaunchedEffect(uiState.messages.size) {
+        if (uiState.messages.isNotEmpty()) {
+            listState.animateScrollToItem(uiState.messages.size - 1)
         }
     }
 
@@ -114,23 +47,43 @@ fun AICoachScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = "AI Coach",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Brush.linearGradient(GradientPurple)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("🤖", fontSize = 20.sp)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "AI Coach",
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = if (uiState.isLoading) "Thinking..." else "Powered by Gemini",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (uiState.isLoading)
+                                    MaterialTheme.colorScheme.primary
+                                else
+                                    Color(0xFF4CAF50)
+                            )
+                        }
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
+                actions = {
+                    IconButton(onClick = { viewModel.clearChatHistory() }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Clear Chat")
+                    }
+                }
             )
         }
     ) { paddingValues ->
@@ -138,233 +91,222 @@ fun AICoachScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
         ) {
-            // Messages List - takes available space
-            Box(
+            LazyColumn(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                state = listState,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(vertical = 16.dp)
             ) {
-                if (messages.isEmpty()) {
-                    Text(
-                        text = "Start a conversation with your coach!",
-                        modifier = Modifier.align(Alignment.Center),
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                        textAlign = TextAlign.Center
-                    )
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 12.dp),
-                        state = listState,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        item { Spacer(modifier = Modifier.height(8.dp)) }
+                items(uiState.messages) { message ->
+                    ChatBubble(message = message)
+                }
 
-                        items(messages, key = { it.id }) { msg ->
-                            ChatBubble(message = msg)
-                        }
-
-                        item { Spacer(modifier = Modifier.height(8.dp)) }
+                if (uiState.isLoading) {
+                    item {
+                        TypingIndicator()
                     }
                 }
             }
 
-            // Input Bar - stays at bottom
-            ChatInputBar(
-                text = inputText,
-                onTextChange = { inputText = it },
-                onSendClick = {
-                    val trimmed = inputText.trim()
-                    if (trimmed.isEmpty()) return@ChatInputBar
+            QuickActionsRow(
+                onMotivation = { viewModel.askForMotivation() },
+                onTips = { viewModel.askForTips() },
+                onStruggle = { viewModel.askAboutStruggle() },
+                enabled = !uiState.isLoading
+            )
 
-                    messages.add(
-                        AIMessage(
-                            content = trimmed,
-                            isFromUser = true
-                        )
+            ChatInputField(
+                value = uiState.inputText,
+                onValueChange = { viewModel.updateInputText(it) },
+                onSend = { viewModel.sendMessage() },
+                isLoading = uiState.isLoading
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChatBubble(message: ChatMessage) {
+    val isUser = message.isFromUser
+    val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+    val timeString = timeFormat.format(Date(message.timestamp))
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
+    ) {
+        Box(
+            modifier = Modifier
+                .widthIn(max = 300.dp)
+                .clip(
+                    RoundedCornerShape(
+                        topStart = 16.dp,
+                        topEnd = 16.dp,
+                        bottomStart = if (isUser) 16.dp else 4.dp,
+                        bottomEnd = if (isUser) 4.dp else 16.dp
                     )
-                    inputText = ""
-
-                    scope.launch {
-                        delay(600)
-                        val reply = generateCoachReply(trimmed)
-                        messages.add(
-                            AIMessage(
-                                content = reply,
-                                isFromUser = false
+                )
+                .background(
+                    if (isUser) {
+                        Brush.linearGradient(GradientPurple)
+                    } else {
+                        Brush.linearGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.surfaceVariant,
+                                MaterialTheme.colorScheme.surfaceVariant
                             )
                         )
                     }
-                }
-            )
-        }
-    }
-}
-
-// ---------- COMPOSABLES ----------
-
-@Composable
-private fun ChatBubble(message: AIMessage) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        horizontalArrangement = if (message.isFromUser) {
-            Arrangement.End
-        } else {
-            Arrangement.Start
-        }
-    ) {
-        Surface(
-            color = if (message.isFromUser)
-                MaterialTheme.colorScheme.primary
-            else
-                MaterialTheme.colorScheme.surfaceVariant,
-            shape = RoundedCornerShape(
-                topStart = 16.dp,
-                topEnd = 16.dp,
-                bottomEnd = if (message.isFromUser) 4.dp else 16.dp,
-                bottomStart = if (message.isFromUser) 16.dp else 4.dp
-            ),
-            modifier = Modifier.fillMaxWidth(0.85f)
+                )
+                .padding(12.dp)
         ) {
             Text(
                 text = message.content,
-                modifier = Modifier.padding(12.dp),
-                color = if (message.isFromUser)
-                    Color.White
-                else
-                    MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (isUser) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium
+            )
+        }
+
+        Text(
+            text = timeString,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+        )
+    }
+}
+
+@Composable
+private fun TypingIndicator() {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        repeat(3) { index ->
+            val alpha = when (index) {
+                0 -> 0.4f
+                1 -> 0.7f
+                else -> 1f
+            }
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = alpha))
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = "AI is thinking...",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun QuickActionsRow(
+    onMotivation: () -> Unit,
+    onTips: () -> Unit,
+    onStruggle: () -> Unit,
+    enabled: Boolean
+) {
+    LazyRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item {
+            AssistChip(
+                onClick = onMotivation,
+                enabled = enabled,
+                label = { Text("💪 Motivate me") },
+                colors = AssistChipDefaults.assistChipColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                )
+            )
+        }
+        item {
+            AssistChip(
+                onClick = onTips,
+                enabled = enabled,
+                label = { Text("💡 Habit tips") },
+                colors = AssistChipDefaults.assistChipColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                )
+            )
+        }
+        item {
+            AssistChip(
+                onClick = onStruggle,
+                enabled = enabled,
+                label = { Text("😓 I'm struggling") },
+                colors = AssistChipDefaults.assistChipColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                )
             )
         }
     }
 }
 
 @Composable
-private fun ChatInputBar(
-    text: String,
-    onTextChange: (String) -> Unit,
-    onSendClick: () -> Unit
+private fun ChatInputField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onSend: () -> Unit,
+    isLoading: Boolean
 ) {
     Surface(
-        tonalElevation = 3.dp,
-        shadowElevation = 8.dp,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
+        tonalElevation = 3.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.Bottom
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             OutlinedTextField(
-                value = text,
-                onValueChange = onTextChange,
+                value = value,
+                onValueChange = onValueChange,
                 modifier = Modifier.weight(1f),
-                placeholder = { Text("Ask your coach...") },
-                maxLines = 4,
+                placeholder = { Text("Ask your AI coach...") },
                 shape = RoundedCornerShape(24.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                )
+                maxLines = 4,
+                enabled = !isLoading
             )
 
-            IconButton(
-                onClick = onSendClick,
-                enabled = text.isNotBlank(),
-                modifier = Modifier.padding(start = 4.dp)
+            Spacer(modifier = Modifier.width(8.dp))
+
+            FloatingActionButton(
+                onClick = onSend,
+                modifier = Modifier.size(48.dp),
+                containerColor = MaterialTheme.colorScheme.primary,
+                shape = CircleShape
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Send,
-                    contentDescription = "Send",
-                    tint = if (text.isNotBlank())
-                        MaterialTheme.colorScheme.primary
-                    else
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                )
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Send,
+                        contentDescription = "Send",
+                        tint = Color.White
+                    )
+                }
             }
         }
-    }
-}
-
-// ---------- SIMPLE REPLY LOGIC ----------
-
-private fun generateCoachReply(userMessage: String): String {
-    val msg = userMessage.lowercase()
-
-    return when {
-        listOf("diet", "food", "eat", "meal").any { it in msg } -> """
-            🥗 Here's a simple balanced diet plan:
-
-            • Breakfast: Oats or eggs + fruit  
-            • Lunch: Lean protein + veggies + whole grains  
-            • Snack: Nuts / yogurt / fruit  
-            • Dinner: Light, more veggies + some protein  
-
-            Drink water through the day and avoid heavy, sugary foods at night.
-        """.trimIndent()
-
-        listOf("exercise", "workout", "gym", "fitness").any { it in msg } -> """
-            💪 Sample weekly workout:
-
-            • Mon: Upper body (push-ups, rows, presses)  
-            • Tue: Cardio (walk/jog 20–30 min)  
-            • Wed: Lower body (squats, lunges)  
-            • Thu: Light cardio + stretching  
-            • Fri: Full body circuit  
-            • Sat/Sun: Rest or light walk  
-
-            Start easy and increase intensity gradually.
-        """.trimIndent()
-
-        listOf("sleep", "insomnia", "tired", "rest").any { it in msg } -> """
-            😴 Better sleep tips:
-
-            • Fix a regular sleep & wake time  
-            • Avoid screens 1 hour before bed  
-            • Keep your room cool and dark  
-            • No heavy meals or caffeine late at night  
-            • Try 5–10 minutes of deep breathing before bed  
-
-            Aim for 7–8 hours of sleep.
-        """.trimIndent()
-
-        listOf("schedule", "timetable", "routine", "plan my day").any { it in msg } -> """
-            📅 Basic daily routine:
-
-            • Morning: Wake, hydrate, light movement, healthy breakfast  
-            • Day: Focused work/study blocks + short breaks  
-            • Evening: Exercise / walk, light dinner  
-            • Night: Relax, no screens, prepare for tomorrow  
-
-            You can tell me your usual wake/sleep times and I can adjust this.
-        """.trimIndent()
-
-        listOf("motivate", "motivation", "hard", "stuck", "lazy").any { it in msg } -> """
-            🌟 You're doing better than you think.
-
-            Progress is built from tiny daily actions, not perfection.  
-            Even 5 minutes of effort keeps your momentum alive.  
-
-            Pick ONE small task you can do in the next 10 minutes.  
-            Do it, and tell me when you're done — we'll build from there 💪
-        """.trimIndent()
-
-        else -> """
-            Thanks for sharing! I can help with:
-
-            • Diet ideas  
-            • Exercise plans  
-            • Sleep improvements  
-            • Daily schedules  
-            • Motivation and habit tips  
-
-            Ask me about any of these, or describe your goal in your own words.
-        """.trimIndent()
     }
 }

@@ -1,13 +1,17 @@
+// ui/screens/auth/AuthViewModel.kt
 package com.mobile.habittrackernew.ui.screens.auth
 
 import android.content.Intent
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.auth.FirebaseUser
 import com.mobile.habittrackernew.data.preferences.PreferencesManager
+import com.mobile.habittrackernew.data.repository.AuthRepository
+import com.mobile.habittrackernew.data.repository.AuthResult
 import com.mobile.habittrackernew.services.GoogleAuthHelper
 import com.mobile.habittrackernew.services.GoogleSignInResult
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,7 +27,7 @@ data class AuthUiState(
     val error: String? = null,
     val loginSuccess: Boolean = false,
     val signupSuccess: Boolean = false,
-    val googleSignInIntent: Intent? = null
+    val passwordResetSent: Boolean = false
 )
 
 data class LoginFormState(
@@ -50,9 +54,14 @@ data class SignupFormState(
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
+    private val authRepository: AuthRepository,
     private val preferencesManager: PreferencesManager,
     private val googleAuthHelper: GoogleAuthHelper
 ) : ViewModel() {
+
+    companion object {
+        private const val TAG = "AuthViewModel"
+    }
 
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
@@ -64,26 +73,58 @@ class AuthViewModel @Inject constructor(
     val signupForm: StateFlow<SignupFormState> = _signupForm.asStateFlow()
 
     init {
+        Log.d(TAG, "AuthViewModel initialized")
         checkAuthState()
+        loadSavedEmail()  // NEW: Load saved email if Remember Me was checked
     }
 
     private fun checkAuthState() {
         viewModelScope.launch {
-            val isLoggedIn = preferencesManager.isLoggedIn.first()
-            val isFirstLaunch = preferencesManager.isFirstLaunch.first()
-            _uiState.update {
-                it.copy(
-                    isLoggedIn = isLoggedIn,
-                    isFirstLaunch = isFirstLaunch,
-                    isLoading = false
-                )
+            try {
+                val isFirstLaunch = preferencesManager.isFirstLaunch.first()
+                val isLoggedIn = authRepository.isLoggedIn
+
+                Log.d(TAG, "Auth state: isLoggedIn=$isLoggedIn, isFirstLaunch=$isFirstLaunch")
+
+                _uiState.update {
+                    it.copy(
+                        isLoggedIn = isLoggedIn,
+                        isFirstLaunch = isFirstLaunch,
+                        isLoading = false
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking auth state", e)
             }
         }
     }
 
-    // Login Form Updates
+    // NEW: Load saved email from preferences
+    private fun loadSavedEmail() {
+        viewModelScope.launch {
+            try {
+                val rememberMe = preferencesManager.rememberMe.first()
+                val savedEmail = preferencesManager.savedEmail.first()
+
+                Log.d(TAG, "Remember Me: $rememberMe, Saved Email: $savedEmail")
+
+                if (rememberMe && savedEmail.isNotBlank()) {
+                    _loginForm.update {
+                        it.copy(
+                            email = savedEmail,
+                            rememberMe = true
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading saved email", e)
+            }
+        }
+    }
+
+    // ==================== Form Updates ====================
     fun updateLoginEmail(email: String) {
-        _loginForm.update { it.copy(email = email, emailError = null) }
+        _loginForm.update { it.copy(email = email.trim(), emailError = null) }
     }
 
     fun updateLoginPassword(password: String) {
@@ -98,13 +139,12 @@ class AuthViewModel @Inject constructor(
         _loginForm.update { it.copy(rememberMe = !it.rememberMe) }
     }
 
-    // Signup Form Updates
     fun updateSignupName(name: String) {
         _signupForm.update { it.copy(name = name, nameError = null) }
     }
 
     fun updateSignupEmail(email: String) {
-        _signupForm.update { it.copy(email = email, emailError = null) }
+        _signupForm.update { it.copy(email = email.trim(), emailError = null) }
     }
 
     fun updateSignupPassword(password: String) {
@@ -123,7 +163,7 @@ class AuthViewModel @Inject constructor(
         _signupForm.update { it.copy(acceptedTerms = !it.acceptedTerms) }
     }
 
-    // Validation
+    // ==================== Validation ====================
     private fun validateLoginForm(): Boolean {
         val form = _loginForm.value
         var isValid = true
@@ -177,92 +217,125 @@ class AuthViewModel @Inject constructor(
             isValid = false
         }
 
-        if (!form.acceptedTerms) {
-            isValid = false
-        }
-
         return isValid
     }
 
-    // Auth Actions
+    // ==================== LOGIN ====================
     fun login() {
-        if (!validateLoginForm()) return
+        Log.d(TAG, ">>> LOGIN BUTTON CLICKED <<<")
+
+        if (!validateLoginForm()) {
+            Log.d(TAG, "Login validation failed")
+            return
+        }
+
+        val form = _loginForm.value
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
 
-            delay(1500)
+            when (val result = authRepository.loginWithEmail(form.email, form.password)) {
+                is AuthResult.Success -> {
+                    Log.d(TAG, "Login SUCCESS: ${result.data.email}")
 
-            val form = _loginForm.value
+                    // NEW: Save Remember Me preference
+                    preferencesManager.setRememberMe(form.rememberMe, form.email)
 
-            preferencesManager.setLoggedIn(
-                isLoggedIn = true,
-                userId = "user_${System.currentTimeMillis()}",
-                userName = form.email.substringBefore("@"),
-                userEmail = form.email
-            )
+                    saveUserToPreferences(result.data)
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            loginSuccess = true,
+                            isLoggedIn = true
+                        )
+                    }
+                }
 
-            preferencesManager.setFirstLaunch(false)
+                is AuthResult.Error -> {
+                    Log.e(TAG, "Login ERROR: ${result.message}")
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = result.message
+                        )
+                    }
+                }
 
-            _uiState.update {
-                it.copy(
-                    isLoading = false,
-                    loginSuccess = true,
-                    isLoggedIn = true
-                )
+                AuthResult.Loading -> {}
             }
         }
     }
 
+    // ==================== SIGNUP ====================
     fun signup() {
-        if (!validateSignupForm()) return
+        Log.d(TAG, ">>> SIGNUP BUTTON CLICKED <<<")
+
+        if (!validateSignupForm()) {
+            Log.d(TAG, "Signup validation failed")
+            return
+        }
+
+        if (!_signupForm.value.acceptedTerms) {
+            _uiState.update { it.copy(error = "Please accept the terms and conditions") }
+            return
+        }
+
+        val form = _signupForm.value
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
 
-            delay(1500)
+            when (val result = authRepository.signupWithEmail(form.name, form.email, form.password)) {
+                is AuthResult.Success -> {
+                    Log.d(TAG, "Signup SUCCESS: ${result.data.email}")
+                    saveUserToPreferences(result.data)
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            signupSuccess = true,
+                            isLoggedIn = true
+                        )
+                    }
+                }
 
-            val form = _signupForm.value
+                is AuthResult.Error -> {
+                    Log.e(TAG, "Signup ERROR: ${result.message}")
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = result.message
+                        )
+                    }
+                }
 
-            preferencesManager.setLoggedIn(
-                isLoggedIn = true,
-                userId = "user_${System.currentTimeMillis()}",
-                userName = form.name,
-                userEmail = form.email
-            )
-
-            preferencesManager.setFirstLaunch(false)
-
-            _uiState.update {
-                it.copy(
-                    isLoading = false,
-                    signupSuccess = true,
-                    isLoggedIn = true
-                )
+                AuthResult.Loading -> {}
             }
         }
     }
 
-    // Google Sign-In
+    // ==================== GOOGLE SIGN-IN ====================
     fun getGoogleSignInIntent(): Intent {
+        Log.d(TAG, "Getting Google Sign-In intent")
         return googleAuthHelper.getSignInIntent()
     }
 
     fun handleGoogleSignInResult(data: Intent?) {
+        Log.d(TAG, "Handling Google Sign-In result")
+
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
 
             when (val result = googleAuthHelper.handleSignInResult(data)) {
                 is GoogleSignInResult.Success -> {
-                    val user = result.user
+                    Log.d(TAG, "Google Sign-In SUCCESS: ${result.user.email}")
+
                     preferencesManager.setLoggedIn(
                         isLoggedIn = true,
-                        userId = user.id,
-                        userName = user.name,
-                        userEmail = user.email,
-                        userPhoto = user.photoUrl ?: ""
+                        userId = result.user.id,
+                        userName = result.user.name,
+                        userEmail = result.user.email,
+                        userPhoto = result.user.photoUrl ?: ""
                     )
-
                     preferencesManager.setFirstLaunch(false)
 
                     _uiState.update {
@@ -275,6 +348,7 @@ class AuthViewModel @Inject constructor(
                 }
 
                 is GoogleSignInResult.Error -> {
+                    Log.e(TAG, "Google Sign-In ERROR: ${result.message}")
                     _uiState.update {
                         it.copy(
                             isLoading = false,
@@ -284,12 +358,58 @@ class AuthViewModel @Inject constructor(
                 }
 
                 GoogleSignInResult.Cancelled -> {
-                    _uiState.update {
-                        it.copy(isLoading = false)
-                    }
+                    Log.d(TAG, "Google Sign-In CANCELLED")
+                    _uiState.update { it.copy(isLoading = false) }
                 }
             }
         }
+    }
+
+    // ==================== PASSWORD RESET ====================
+    fun sendPasswordResetEmail() {
+        val email = _loginForm.value.email
+        if (email.isBlank()) {
+            _uiState.update { it.copy(error = "Please enter your email first") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, error = null) }
+
+            when (val result = authRepository.sendPasswordResetEmail(email)) {
+                is AuthResult.Success -> {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            passwordResetSent = true
+                        )
+                    }
+                }
+
+                is AuthResult.Error -> {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = result.message
+                        )
+                    }
+                }
+
+                AuthResult.Loading -> {}
+            }
+        }
+    }
+
+    // ==================== HELPERS ====================
+    private suspend fun saveUserToPreferences(user: FirebaseUser) {
+        preferencesManager.setLoggedIn(
+            isLoggedIn = true,
+            userId = user.uid,
+            userName = user.displayName ?: "User",
+            userEmail = user.email ?: "",
+            userPhoto = user.photoUrl?.toString() ?: ""
+        )
+        preferencesManager.setFirstLaunch(false)
     }
 
     fun clearError() {
@@ -302,5 +422,21 @@ class AuthViewModel @Inject constructor(
 
     fun resetSignupSuccess() {
         _uiState.update { it.copy(signupSuccess = false) }
+    }
+
+    fun resetPasswordResetSent() {
+        _uiState.update { it.copy(passwordResetSent = false) }
+    }
+
+    fun logout() {
+        viewModelScope.launch {
+            authRepository.logout()
+            googleAuthHelper.signOut()
+            preferencesManager.logout()  // This now preserves Remember Me settings
+            _uiState.update { AuthUiState() }
+
+            // Reload saved email if Remember Me was enabled
+            loadSavedEmail()
+        }
     }
 }

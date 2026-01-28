@@ -1,3 +1,4 @@
+// ui/screens/auth/LoginScreen.kt
 package com.mobile.habittrackernew.ui.screens.auth
 
 import android.app.Activity
@@ -8,17 +9,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,24 +21,8 @@ import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Divider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,8 +35,10 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.mobile.habittrackernew.ui.theme.GradientPurple
 
@@ -75,6 +52,9 @@ fun LoginScreen(
     val formState by viewModel.loginForm.collectAsState()
     val focusManager = LocalFocusManager.current
 
+    // State for forgot password dialog
+    var showForgotPasswordDialog by remember { mutableStateOf(false) }
+
     // Google Sign-In launcher
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -84,10 +64,19 @@ fun LoginScreen(
         }
     }
 
+    // Navigate on login success
     LaunchedEffect(uiState.loginSuccess) {
         if (uiState.loginSuccess) {
             viewModel.resetLoginSuccess()
             onLoginSuccess()
+        }
+    }
+
+    // Show success message when password reset email is sent
+    LaunchedEffect(uiState.passwordResetSent) {
+        if (uiState.passwordResetSent) {
+            showForgotPasswordDialog = false
+            viewModel.resetPasswordResetSent()
         }
     }
 
@@ -248,7 +237,8 @@ fun LoginScreen(
                     )
                 }
 
-                TextButton(onClick = { /* TODO: Forgot password */ }) {
+                // UPDATED: Forgot Password button now opens dialog
+                TextButton(onClick = { showForgotPasswordDialog = true }) {
                     Text(
                         text = "Forgot Password?",
                         color = MaterialTheme.colorScheme.primary,
@@ -293,18 +283,18 @@ fun LoginScreen(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Divider(modifier = Modifier.weight(1f))
+                HorizontalDivider(modifier = Modifier.weight(1f))
                 Text(
                     text = "  OR  ",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Divider(modifier = Modifier.weight(1f))
+                HorizontalDivider(modifier = Modifier.weight(1f))
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Google Sign In Button - NOW FUNCTIONAL!
+            // Google Sign In Button
             OutlinedButton(
                 onClick = {
                     val signInIntent = viewModel.getGoogleSignInIntent()
@@ -320,7 +310,6 @@ fun LoginScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
                 ) {
-                    // Google Logo
                     Text(
                         text = "G",
                         fontSize = 24.sp,
@@ -381,6 +370,189 @@ fun LoginScreen(
                     text = uiState.error ?: "",
                     color = MaterialTheme.colorScheme.onErrorContainer
                 )
+            }
+        }
+
+        // Success Snackbar for password reset
+        AnimatedVisibility(
+            visible = uiState.passwordResetSent,
+            enter = fadeIn() + slideInVertically(),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(16.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF4CAF50))
+                    .padding(16.dp)
+                    .clickable { viewModel.resetPasswordResetSent() }
+            ) {
+                Text(
+                    text = "✅ Password reset email sent! Check your inbox.",
+                    color = Color.White,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+
+    // Forgot Password Dialog
+    if (showForgotPasswordDialog) {
+        ForgotPasswordDialog(
+            email = formState.email,
+            isLoading = uiState.isLoading,
+            onDismiss = { showForgotPasswordDialog = false },
+            onSendResetEmail = { email ->
+                viewModel.updateLoginEmail(email)
+                viewModel.sendPasswordResetEmail()
+            }
+        )
+    }
+}
+
+@Composable
+fun ForgotPasswordDialog(
+    email: String,
+    isLoading: Boolean,
+    onDismiss: () -> Unit,
+    onSendResetEmail: (String) -> Unit
+) {
+    var emailInput by remember { mutableStateOf(email) }
+    var emailError by remember { mutableStateOf<String?>(null) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Icon
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "🔐",
+                        fontSize = 32.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Title
+                Text(
+                    text = "Forgot Password?",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Description
+                Text(
+                    text = "Enter your email address and we'll send you a link to reset your password.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Email Input
+                OutlinedTextField(
+                    value = emailInput,
+                    onValueChange = {
+                        emailInput = it
+                        emailError = null
+                    },
+                    label = { Text("Email") },
+                    placeholder = { Text("Enter your email") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Email,
+                            contentDescription = null
+                        )
+                    },
+                    isError = emailError != null,
+                    supportingText = emailError?.let { { Text(it) } },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Email,
+                        imeAction = ImeAction.Done
+                    ),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Cancel Button
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = !isLoading
+                    ) {
+                        Text("Cancel")
+                    }
+
+                    // Send Button
+                    Button(
+                        onClick = {
+                            // Validate email
+                            when {
+                                emailInput.isBlank() -> {
+                                    emailError = "Email is required"
+                                }
+                                !android.util.Patterns.EMAIL_ADDRESS.matcher(emailInput).matches() -> {
+                                    emailError = "Invalid email format"
+                                }
+                                else -> {
+                                    onSendResetEmail(emailInput)
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = !isLoading
+                    ) {
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text("Send Link")
+                        }
+                    }
+                }
             }
         }
     }

@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Habit Tracker</string>
+    <string name="app_name">HabitTracker</string>
+    <!-- This will be auto-generated when you add google-services.json -->
+    <!-- But you can also get it from Firebase Console → Project Settings → Web API Key -->
+    <string name="default_web_client_id">463475164476-vga7fn2ac0dhcrgb8ui66c2fo82c2gbe.apps.googleusercontent.com</string>
 </resources>

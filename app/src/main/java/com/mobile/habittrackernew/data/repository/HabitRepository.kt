@@ -397,7 +397,7 @@ class HabitRepository @Inject constructor(
 
     suspend fun saveAIMessage(message: AIMessage): Long = aiMessageDao.insertMessage(message)
 
-    suspend fun clearAIMessages() = aiMessageDao.clearAllMessages()
+    suspend fun clearAIMessages() = aiMessageDao.deleteAllMessages()
 
     // ==================== DATA MANAGEMENT ====================
 
@@ -406,7 +406,7 @@ class HabitRepository @Inject constructor(
         cancelAllHabitReminders()
 
         // Clear all tables
-        aiMessageDao.clearAllMessages()
+        aiMessageDao.deleteAllMessages()
     }
 
     suspend fun exportData(): Map<String, Any> {

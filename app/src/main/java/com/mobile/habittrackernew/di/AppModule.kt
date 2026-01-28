@@ -2,9 +2,13 @@ package com.mobile.habittrackernew.di
 
 import android.content.Context
 import androidx.room.Room
+import com.google.firebase.auth.FirebaseAuth
 import com.mobile.habittrackernew.data.database.*
 import com.mobile.habittrackernew.data.preferences.PreferencesManager
+import com.mobile.habittrackernew.data.repository.AuthRepository
 import com.mobile.habittrackernew.data.repository.HabitRepository
+import com.mobile.habittrackernew.services.AIService
+import com.mobile.habittrackernew.services.GoogleAuthHelper
 import com.mobile.habittrackernew.services.NotificationHelper
 import dagger.Module
 import dagger.Provides
@@ -17,6 +21,7 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
+    // ============ DATABASE ============
     @Provides
     @Singleton
     fun provideAppDatabase(
@@ -31,47 +36,67 @@ object AppModule {
             .build()
     }
 
+    // ============ FIREBASE ============
     @Provides
     @Singleton
-    fun provideHabitDao(database: AppDatabase): HabitDao {
-        return database.habitDao()
-    }
+    fun provideFirebaseAuth(): FirebaseAuth = FirebaseAuth.getInstance()
+
+    // ============ AUTH ============
+    @Provides
+    @Singleton
+    fun provideGoogleAuthHelper(
+        @ApplicationContext context: Context,
+        firebaseAuth: FirebaseAuth
+    ): GoogleAuthHelper = GoogleAuthHelper(context, firebaseAuth)
 
     @Provides
     @Singleton
-    fun provideHabitLogDao(database: AppDatabase): HabitLogDao {
-        return database.habitLogDao()
-    }
+    fun provideAuthRepository(
+        firebaseAuth: FirebaseAuth
+    ): AuthRepository = AuthRepository(firebaseAuth)
 
+    // ============ AI SERVICE ============
     @Provides
     @Singleton
-    fun provideUserProfileDao(database: AppDatabase): UserProfileDao {
-        return database.userProfileDao()
-    }
+    fun provideAIService(): AIService = AIService()
 
-    @Provides
-    @Singleton
-    fun provideAIMessageDao(database: AppDatabase): AIMessageDao {
-        return database.aiMessageDao()
-    }
-
+    // ============ PREFERENCES ============
     @Provides
     @Singleton
     fun providePreferencesManager(
         @ApplicationContext context: Context
-    ): PreferencesManager {
-        return PreferencesManager(context)
-    }
+    ): PreferencesManager = PreferencesManager(context)
 
+    // ============ DAOs ============
+    @Provides
+    @Singleton
+    fun provideHabitDao(database: AppDatabase): HabitDao = database.habitDao()
+
+    @Provides
+    @Singleton
+    fun provideHabitLogDao(database: AppDatabase): HabitLogDao = database.habitLogDao()
+
+    @Provides
+    @Singleton
+    fun provideUserProfileDao(database: AppDatabase): UserProfileDao = database.userProfileDao()
+
+    @Provides
+    @Singleton
+    fun provideAIMessageDao(database: AppDatabase): AIMessageDao = database.aiMessageDao()
+
+    @Provides
+    @Singleton
+    fun provideAlarmDao(database: AppDatabase): AlarmDao = database.alarmDao()
+
+    // ============ HELPERS ============
     @Provides
     @Singleton
     fun provideNotificationHelper(
         @ApplicationContext context: Context,
         preferencesManager: PreferencesManager
-    ): NotificationHelper {
-        return NotificationHelper(context, preferencesManager)
-    }
+    ): NotificationHelper = NotificationHelper(context, preferencesManager)
 
+    // ============ REPOSITORIES ============
     @Provides
     @Singleton
     fun provideHabitRepository(
@@ -80,7 +105,7 @@ object AppModule {
         userProfileDao: UserProfileDao,
         aiMessageDao: AIMessageDao,
         notificationHelper: NotificationHelper,
-        preferencesManager: PreferencesManager // ADD THIS
+        preferencesManager: PreferencesManager
     ): HabitRepository {
         return HabitRepository(
             habitDao,
@@ -88,12 +113,7 @@ object AppModule {
             userProfileDao,
             aiMessageDao,
             notificationHelper,
-            preferencesManager // ADD THIS
+            preferencesManager
         )
-    }
-    @Provides
-    @Singleton
-    fun provideAlarmDao(database: AppDatabase): AlarmDao {
-        return database.alarmDao()
     }
 }
