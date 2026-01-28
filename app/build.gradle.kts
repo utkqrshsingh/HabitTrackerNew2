@@ -28,12 +28,12 @@ if (geminiApiKey.isEmpty()) {
 
 android {
     namespace = "com.mobile.habittrackernew"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.mobile.habittrackernew"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
