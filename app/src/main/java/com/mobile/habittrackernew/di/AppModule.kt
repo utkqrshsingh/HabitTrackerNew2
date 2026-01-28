@@ -58,7 +58,9 @@ object AppModule {
     // ============ AI SERVICE ============
     @Provides
     @Singleton
-    fun provideAIService(): AIService = AIService()
+    fun provideAIService(
+        @ApplicationContext context: Context
+    ): AIService = AIService(context)
 
     // ============ PREFERENCES ============
     @Provides

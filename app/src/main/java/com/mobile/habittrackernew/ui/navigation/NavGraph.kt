@@ -10,9 +10,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material3.Icon
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -36,6 +36,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.mobile.habittrackernew.ui.screens.aicoach.AICoachScreen
+import com.mobile.habittrackernew.ui.screens.aicoach.DebugScreen
 import com.mobile.habittrackernew.ui.screens.alarms.AlarmsScreen
 import com.mobile.habittrackernew.ui.screens.auth.AuthViewModel
 import com.mobile.habittrackernew.ui.screens.auth.LoginScreen
@@ -238,6 +239,12 @@ fun HabitTrackerNavHost(
                     onAlarmsClick = {
                         navController.navigate(Screen.Alarms.route)
                     }
+                )
+            }
+
+            composable("debug") {
+                DebugScreen(
+                    onBack = { navController.navigateUp() }
                 )
             }
 
